@@ -16,6 +16,15 @@ import { DEFAULT_RADAR_CONFIG } from "./components/TechRadar/radarConfig";
  */
 const SCRAPED_CACHE_KEY = "pnm-radar-scraped-cache";
 
+/**
+ * Radar-only builds ship without the admin console (see
+ * `npm run build:portable`). There is then no UI that can write or clear
+ * `pnm-radar-published`, so honouring a leftover published snapshot would
+ * pin the radar to stale data forever — both builds share the same origin,
+ * and therefore the same localStorage. Ignore the override entirely.
+ */
+const RADAR_ONLY = import.meta.env.VITE_RADAR_ONLY === "true";
+
 function loadScrapedCache(): RadarSnapshot | null {
   try {
     const raw = localStorage.getItem(SCRAPED_CACHE_KEY);
@@ -46,7 +55,7 @@ function saveScrapedCache(snapshot: RadarSnapshot): void {
 /**
  * Public radar. Data source resolution, in priority order:
  *   1. localStorage published snapshot (admin console override — user
- *      intent takes precedence over automation)
+ *      intent takes precedence over automation; skipped in RADAR_ONLY builds)
  *   2. /radar-data.json served by Vite (scraper output)
  *   3. Compiled-in DEFAULT_RADAR_CONFIG (offline fallback)
  *
@@ -59,7 +68,7 @@ function saveScrapedCache(snapshot: RadarSnapshot): void {
  */
 export default function App() {
   const [snapshot, setSnapshot] = useState<RadarSnapshot | null>(() =>
-    loadSnapshot(PUBLISHED_KEY),
+    RADAR_ONLY ? null : loadSnapshot(PUBLISHED_KEY),
   );
   // Seed from localStorage cache so the first paint already has real data
   // instead of flashing the compiled-in defaults.
@@ -98,6 +107,7 @@ export default function App() {
   }, [fetchScraped]);
 
   useEffect(() => {
+    if (RADAR_ONLY) return;
     const onStorage = (event: StorageEvent) => {
       if (event.key === PUBLISHED_KEY) {
         setSnapshot(loadSnapshot(PUBLISHED_KEY));
