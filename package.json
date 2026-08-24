@@ -1,13 +1,14 @@
 {
   "name": "tech-radar",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "serve": "node scripts/serve.mjs",
+    "build:portable": "node scripts/build-portable.mjs",
     "scrape": "node scripts/scrape/index.mjs",
     "test:scrape": "node --test scripts/scrape/__tests__/*.test.mjs",
     "autostart:enable": "powershell -ExecutionPolicy Bypass -File scripts/register-autostart.ps1",

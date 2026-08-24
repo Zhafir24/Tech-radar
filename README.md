@@ -8,8 +8,13 @@ Two entry points (Vite multi-page app):
 
 | Page | Dev URL | Purpose |
 |---|---|---|
-| Public radar | http://localhost:5173/ | Renders the last **published** snapshot |
+| Public radar | http://localhost:5173/ | Renders the radar + pipeline status; **Manage sources** lives here |
 | Admin console | http://localhost:5173/admin.html | Edit the **draft**, then publish |
+
+The public page resolves its data in priority order: the **published**
+snapshot from localStorage (admin override), then `/radar-data.json` written
+by the scraper, then the compiled-in `DEFAULT_RADAR_CONFIG`. Radar-only
+builds skip step 1 entirely.
 
 The admin edits a draft (autosaved to `localStorage["pnm-radar-draft"]`);
 **Publish** copies it to `localStorage["pnm-radar-published"]`, which the
@@ -27,16 +32,33 @@ Two paths — pick whichever fits.
 
 Grab the latest `Tech-Radar-Portable-v*-windows-x64.zip` from
 [Releases](https://github.com/Zhafir24/Tech-radar/releases), extract, and
-double-click `Start Tech Radar.bat`. Two browser tabs open automatically:
+double-click `Start Tech Radar.bat`. The radar opens at
+`http://localhost:5173/`.
 
-- `http://localhost:5173/` — public radar
-- `http://localhost:5173/admin.html` — admin console (Manage Sources → add a
-  feed URL → next scrape picks it up)
-
-The zip is fully self-contained: bundled Node.js 24 LTS, pre-installed
+The zip is fully self-contained: bundled Node.js runtime, pre-installed
 `node_modules`, current scrape data. Close the console window to stop the
 server; run the `.bat` again to restart. Windows Defender may flag the
 unsigned `node.exe` on first launch — "More info → Run anyway" proceeds.
+
+**From v1.5 the portable bundle is radar-only** — it ships without the admin
+console (see [Build variants](#build-variants)). Everything you need to drive
+the radar lives on the radar page itself: *Show details → Manage sources* to
+add a website, toggle a source, or hit **Rescrape now**.
+
+### Build variants
+
+```bash
+npm run build:portable -- --out ./release              # radar-only (default)
+npm run build:portable -- --out ./release --with-admin # radar + admin console
+```
+
+The radar-only variant omits `src/admin/` and `admin.html`, and sets
+`VITE_RADAR_ONLY=true` in the staged app. That flag also makes
+[src/App.tsx](src/App.tsx) ignore the `pnm-radar-published` localStorage
+override: that key exists purely so the admin console can pin a curated
+snapshot, and with no admin console shipped there would be no UI to clear
+it — a snapshot left behind by a full build (same origin, therefore the same
+localStorage) would otherwise freeze the radar on stale data.
 
 ### B. From source (any OS)
 
