@@ -21,7 +21,28 @@ localStorage does not cross origins, so a backend becomes mandatory there.
 
 ## Quick start
 
+Two paths — pick whichever fits.
+
+### A. Portable release (Windows, no Node required)
+
+Grab the latest `Tech-Radar-Portable-v*-windows-x64.zip` from
+[Releases](https://github.com/Zhafir24/Tech-radar/releases), extract, and
+double-click `Start Tech Radar.bat`. Two browser tabs open automatically:
+
+- `http://localhost:5173/` — public radar
+- `http://localhost:5173/admin.html` — admin console (Manage Sources → add a
+  feed URL → next scrape picks it up)
+
+The zip is fully self-contained: bundled Node.js 24 LTS, pre-installed
+`node_modules`, current scrape data. Close the console window to stop the
+server; run the `.bat` again to restart. Windows Defender may flag the
+unsigned `node.exe` on first launch — "More info → Run anyway" proceeds.
+
+### B. From source (any OS)
+
 ```bash
+git clone https://github.com/Zhafir24/Tech-radar.git
+cd Tech-radar
 npm install
 npm run dev        # public: /   admin: /admin.html
 npm run build      # type-checks (tsc --noEmit) then bundles both entries to dist/
