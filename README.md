@@ -40,6 +40,16 @@ The zip is fully self-contained: bundled Node.js runtime, pre-installed
 server; run the `.bat` again to restart. Windows Defender may flag the
 unsigned `node.exe` on first launch — "More info → Run anyway" proceeds.
 
+The bundle launches through [scripts/serve-portable.mjs](scripts/serve-portable.mjs),
+**not** [scripts/serve.mjs](scripts/serve.mjs). The latter reclaims port 5173
+by force-killing whoever holds it, which is fine for a single dev machine but
+wrong in distributed software: it would kill an unrelated program, and two
+copies of it (say the autostart dev server plus an extracted bundle) kill each
+other's Vite forever. The portable launcher instead takes the first free port
+from 5173 upward, never terminates a process it does not own, opens the browser
+on whichever port it settled on, and stops with a diagnosis after repeated
+instant failures rather than looping.
+
 **From v1.5 the portable bundle is radar-only** — it ships without the admin
 console (see [Build variants](#build-variants)). Everything you need to drive
 the radar lives on the radar page itself: *Show details → Manage sources* to
