@@ -1,0 +1,143 @@
+{
+  "generatedAt": "2026-08-24T08:07:15.172Z",
+  "durationMs": 15934,
+  "health": "ok",
+  "sources": [
+    {
+      "id": "dev.to",
+      "displayName": "dev.to",
+      "itemCount": 66,
+      "status": "ok"
+    },
+    {
+      "id": "github-trending",
+      "displayName": "GitHub Trending",
+      "itemCount": 61,
+      "status": "ok"
+    },
+    {
+      "id": "thehackernews",
+      "displayName": "The Hacker News",
+      "itemCount": 50,
+      "status": "ok"
+    },
+    {
+      "id": "infoq",
+      "displayName": "InfoQ",
+      "itemCount": 15,
+      "status": "ok"
+    },
+    {
+      "id": "lobsters",
+      "displayName": "Lobste.rs",
+      "itemCount": 33,
+      "status": "ok"
+    },
+    {
+      "id": "custom-a5236ecd47",
+      "displayName": "Ars Technica",
+      "itemCount": 20,
+      "status": "ok"
+    },
+    {
+      "id": "custom-7836e46939",
+      "displayName": "Tildes",
+      "itemCount": 50,
+      "status": "ok"
+    },
+    {
+      "id": "custom-004afe297d",
+      "displayName": "Fosstodon",
+      "itemCount": 2,
+      "status": "ok"
+    },
+    {
+      "id": "custom-4e423b8dd9",
+      "displayName": "devurls.com",
+      "itemCount": 100,
+      "status": "ok"
+    },
+    {
+      "id": "custom-e68e90ed91",
+      "displayName": "Tech Radar",
+      "itemCount": 50,
+      "status": "ok"
+    }
+  ],
+  "sourcesSummary": {
+    "ok": 10,
+    "active": 10,
+    "total": 10
+  },
+  "pipeline": {
+    "candidates": 447,
+    "mentions": 231,
+    "technologiesFresh": 60,
+    "technologiesInStore": 115,
+    "selected": 100
+  },
+  "distribution": {
+    "byQuadrant": {
+      "infrastructure": 23,
+      "ai-automation": 20,
+      "security": 15,
+      "data-integration": 42
+    },
+    "byRing": {
+      "adopt": 24,
+      "trial": 33,
+      "assess": 22,
+      "emerging": 21
+    }
+  },
+  "changes": {
+    "hasHistory": true,
+    "added": [
+      "airflow",
+      "kafka",
+      "astro",
+      "playwright",
+      "cloudflare-workers",
+      "webpack",
+      "ansible",
+      "pytorch",
+      "vite",
+      "chromadb"
+    ],
+    "removed": [
+      "gke",
+      "gpt-4",
+      "zig",
+      "laravel",
+      "mongodb",
+      "aws-s3",
+      "valkey",
+      "vertex-ai",
+      "nodejs",
+      "eslint"
+    ],
+    "movedUp": [
+      {
+        "slug": "wasm",
+        "from": "assess",
+        "to": "trial"
+      },
+      {
+        "slug": "ray",
+        "from": "assess",
+        "to": "trial"
+      },
+      {
+        "slug": "php",
+        "from": "trial",
+        "to": "adopt"
+      },
+      {
+        "slug": "ruby",
+        "from": "emerging",
+        "to": "assess"
+      }
+    ],
+    "movedDown": []
+  }
+}

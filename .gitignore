@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Vite cache
+.vite/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Claude Code local settings (per-user)
+.claude/settings.local.json
+
+# Runtime & scrape logs
+serve.log
+data/logs/
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Puppeteer / headless-Chrome scratch profiles
+.chrome-profile/

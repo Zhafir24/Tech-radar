@@ -1,0 +1,51 @@
+{
+  "builtIn": {
+    "dev.to": {
+      "enabled": true
+    },
+    "github-trending": {
+      "enabled": true
+    },
+    "thehackernews": {
+      "enabled": true
+    },
+    "infoq": {
+      "enabled": true
+    },
+    "lobsters": {
+      "enabled": true
+    }
+  },
+  "custom": [
+    {
+      "id": "custom-a5236ecd47",
+      "name": "Ars Technica",
+      "url": "https://arstechnica.com/information-technology/",
+      "enabled": true
+    },
+    {
+      "id": "custom-7836e46939",
+      "name": "Tildes",
+      "url": "http://tildes.net/",
+      "enabled": true
+    },
+    {
+      "id": "custom-004afe297d",
+      "name": "Fosstodon",
+      "url": "https://fosstodon.org/",
+      "enabled": true
+    },
+    {
+      "id": "custom-4e423b8dd9",
+      "name": "devurls.com",
+      "url": "https://devurls.com/",
+      "enabled": true
+    },
+    {
+      "id": "custom-e68e90ed91",
+      "name": "Tech Radar",
+      "url": "https://www.techradar.com/",
+      "enabled": true
+    }
+  ]
+}

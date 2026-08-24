@@ -1,0 +1,83 @@
+@import "@fontsource-variable/inter";
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+/*
+ * Blip interaction states.
+ *
+ * The outer <g> carries the translate() placement (SVG attribute transform),
+ * so the hover/focus scale lives on an inner group — CSS `transform` on the
+ * outer group would override the attribute transform and break positioning.
+ */
+.radar-blip {
+  cursor: pointer;
+  outline: none;
+}
+
+.radar-blip__disc {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition:
+    transform 160ms ease,
+    filter 160ms ease;
+}
+
+.radar-blip:hover .radar-blip__disc,
+.radar-blip:focus-visible .radar-blip__disc {
+  transform: scale(1.15);
+}
+
+/* Tooltip entrance */
+.radar-tooltip {
+  animation: radar-tooltip-in 140ms ease-out both;
+}
+
+@keyframes radar-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -100%) translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -100%) translateY(-16px);
+  }
+}
+
+.radar-tooltip--below {
+  animation-name: radar-tooltip-in-below;
+}
+
+@keyframes radar-tooltip-in-below {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 0) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) translateY(16px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radar-blip__disc,
+  .radar-tooltip {
+    transition: none;
+    animation: none;
+  }
+  .radar-tooltip {
+    opacity: 1;
+    transform: translate(-50%, -100%) translateY(-16px);
+  }
+  .radar-tooltip--below {
+    transform: translate(-50%, 0) translateY(16px);
+  }
+  /*
+   * .radar-blip__pulse intentionally NOT disabled here — the widget green
+   * dot uses Tailwind's `animate-ping` which does not respect this media
+   * query either, so keeping the blip pulse always-on matches that
+   * behavior and ensures both "alive" signals fire together.
+   */
+}

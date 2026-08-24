@@ -1,0 +1,370 @@
+/**
+ * "Any website" fetcher — used for every custom source added via the widget.
+ *
+ * Runs five tiers in order and returns the first non-empty result:
+ *
+ *   1. Direct fetch. If the URL already returns a feed (XML/RSS/Atom
+ *      content-type OR the body looks like one), parse it as a feed.
+ *
+ *   2. Feed autodiscovery. If we got HTML, parse it and follow any
+ *      <link rel="alternate" type="application/rss+xml" href="..."> pointer
+ *      to the real feed URL, then re-attempt tier 1 on that URL.
+ *
+ *   3. Common feed paths. Try the well-known conventional locations off the
+ *      origin (/rss, /feed, /rss.xml, /atom.xml, etc.) in case the site
+ *      publishes a feed but doesn't advertise it via <link>.
+ *
+ *   4. HTML link scrape. Parse the initial HTML and pull out every <a>
+ *      whose text looks article-shaped. Titles are the anchor text; the
+ *      pipeline's taxonomy filter drops anything unrelated to tech.
+ *
+ *   5. Puppeteer real-browser render. If everything above returned nothing
+ *      (site is behind Cloudflare bot-check, requires JS, or blocks
+ *      non-browser UAs), spin up an actual Chrome tab, wait for the page
+ *      to settle, then re-run tiers 2-4 against the rendered HTML.
+ *
+ * If tier 5 also yields nothing, we return []. The widget renders that
+ * source amber with 0 items so the user knows their URL didn't yield
+ * anything.
+ */
+import * as cheerio from "cheerio";
+import fs from "node:fs";
+import { fetchRss } from "./rss.mjs";
+import { canonicalUrl } from "../normalize.mjs";
+import { log } from "../logger.mjs";
+
+const USER_AGENT =
+  "Mozilla/5.0 (compatible; TechRadar/1.0; +https://example.invalid/radar)";
+
+const COMMON_FEED_PATHS = [
+  "/rss.xml",
+  "/feed",
+  "/feed.xml",
+  "/rss",
+  "/atom.xml",
+  "/index.xml",
+  "/feeds/all.atom.xml",
+  "/blog/rss.xml",
+  "/blog/feed",
+];
+
+// Anchor text shorter than this is almost always navigation — "Home",
+// "Login", "About", etc. — never worth ingesting.
+const MIN_ANCHOR_TEXT_LEN = 20;
+const MAX_ANCHOR_TEXT_LEN = 200;
+const MAX_HTML_SCRAPE_ITEMS = 100;
+
+/**
+ * @param {string} sourceId
+ * @param {string} urlString
+ * @returns {Promise<import("../normalize.mjs").Candidate[]>}
+ */
+export async function fetchWebsite(sourceId, urlString) {
+  let root;
+  try {
+    root = new URL(urlString);
+  } catch {
+    log.warn(`${sourceId}: invalid URL, skipping`, { url: urlString });
+    return [];
+  }
+
+  const initial = await tryFetch(root.toString());
+
+  if (initial) {
+    // Tier 1: URL is already a feed.
+    if (initial.looksLikeFeed) {
+      log.info(`${sourceId}: URL is a feed, parsing directly`);
+      return await fetchRss(sourceId, root.toString());
+    }
+
+    if (initial.contentType.includes("html")) {
+      // Tier 2: <link rel="alternate"> autodiscovery.
+      const discovered = discoverFeedUrl(initial.body, root);
+      if (discovered) {
+        log.info(`${sourceId}: autodiscovered feed via <link>`, {
+          feedUrl: discovered,
+        });
+        const items = await fetchRss(sourceId, discovered);
+        if (items.length > 0) return items;
+      }
+
+      // Tier 3: Common feed paths off the origin.
+      for (const path of COMMON_FEED_PATHS) {
+        const candidate = new URL(path, root.origin + "/").toString();
+        const probe = await tryFetch(candidate);
+        if (probe?.looksLikeFeed) {
+          log.info(`${sourceId}: feed found at conventional path`, { candidate });
+          const items = await fetchRss(sourceId, candidate);
+          if (items.length > 0) return items;
+        }
+      }
+
+      // Tier 4: HTML link scrape.
+      const scraped = scrapeHtmlLinks(sourceId, initial.body, root);
+      if (scraped.length > 0) {
+        log.info(`${sourceId}: HTML link scrape`, { count: scraped.length });
+        return scraped;
+      }
+    } else {
+      log.warn(`${sourceId}: unknown content type`, {
+        contentType: initial.contentType,
+      });
+    }
+  } else {
+    // Cloudflare 403, network error, or similar — fall through to browser.
+    log.warn(`${sourceId}: HTTP fetch was blocked, falling through to browser`, {
+      url: root.toString(),
+    });
+  }
+
+  // Tier 5: Puppeteer render — for sites that are behind Cloudflare, block
+  // non-browser UAs, or ship an empty <div id="root"> and render everything
+  // in JS. Slow (5-30s), only fires when everything else has failed.
+  log.info(`${sourceId}: trying real-browser render`);
+  return await fetchViaBrowser(sourceId, root);
+}
+
+async function fetchViaBrowser(sourceId, rootUrl) {
+  const chromePath = findChromeExecutable();
+  if (!chromePath) {
+    log.warn(`${sourceId}: no Chrome/Edge found — cannot browser-render`);
+    return [];
+  }
+
+  let browser;
+  try {
+    // puppeteer-extra + stealth plugin defeats most bot-detection fingerprints
+    // (navigator.webdriver, chrome.runtime, plugin count, WebGL vendor, etc.).
+    // Not a silver bullet — Cloudflare's Turnstile has other heuristics — but
+    // it's the best chance short of a paid captcha-solving proxy.
+    const puppeteer = (await import("puppeteer-extra")).default;
+    const stealth = (await import("puppeteer-extra-plugin-stealth")).default;
+    puppeteer.use(stealth());
+    browser = await puppeteer.launch({
+      executablePath: chromePath,
+      headless: "new",
+      args: [
+        "--no-sandbox",
+        "--disable-blink-features=AutomationControlled",
+      ],
+    });
+    const page = await browser.newPage();
+    await page.setUserAgent(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+        "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    );
+    await page.setViewport({ width: 1280, height: 800 });
+
+    // Give Cloudflare's challenge a real chance to resolve.
+    await page.goto(rootUrl.toString(), {
+      waitUntil: "networkidle2",
+      timeout: 30_000,
+    });
+
+    // Additional grace period in case the page mutates after networkidle.
+    await new Promise((r) => setTimeout(r, 1500));
+
+    // If we landed on a Cloudflare / DataDome / Akamai anti-bot challenge,
+    // poll for up to 25s for it to auto-clear. Sometimes it does (the JS
+    // solves the puzzle); often it doesn't when the browser is detected as
+    // headless. We stop polling either way and let the caller see whatever
+    // HTML is there.
+    const CHALLENGE_TITLES = [
+      "just a moment",
+      "attention required",
+      "please wait",
+      "checking your browser",
+      "one moment",
+    ];
+    const isChallengePage = async () => {
+      const title = (await page.title()).toLowerCase();
+      return CHALLENGE_TITLES.some((t) => title.includes(t));
+    };
+    if (await isChallengePage()) {
+      log.info(`${sourceId}: anti-bot challenge detected, polling to clear`);
+      const deadline = Date.now() + 25_000;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 1000));
+        if (!(await isChallengePage())) {
+          log.info(`${sourceId}: challenge cleared`);
+          break;
+        }
+      }
+      if (await isChallengePage()) {
+        log.warn(
+          `${sourceId}: anti-bot challenge did not clear — site actively blocks automation`,
+        );
+      }
+      // Extra settle time for the real page to render.
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+
+    const renderedHtml = await page.content();
+
+    // Try feed autodiscovery + common paths again — the browser has real
+    // cookies now, so those endpoints may work where the plain fetch didn't.
+    const discovered = discoverFeedUrl(renderedHtml, rootUrl);
+    if (discovered) {
+      // Fetch the feed *through the browser* to inherit any Cloudflare cookies.
+      const feedContent = await fetchThroughBrowser(page, discovered);
+      if (feedContent && /<\s*(rss|feed|channel)\b/i.test(feedContent)) {
+        log.info(`${sourceId}: browser tier autodiscovered feed`, { discovered });
+        const items = await fetchRss(sourceId, discovered);
+        if (items.length > 0) return items;
+      }
+    }
+
+    // Fall back to HTML link scrape on the rendered DOM.
+    const items = scrapeHtmlLinks(sourceId, renderedHtml, rootUrl);
+    log.info(`${sourceId}: browser tier scraped links`, { count: items.length });
+    return items;
+  } catch (err) {
+    log.warn(`${sourceId}: browser render failed`, {
+      error: err?.message ?? String(err),
+    });
+    return [];
+  } finally {
+    if (browser) {
+      try {
+        await browser.close();
+      } catch {
+        // Ignore browser-close errors — process is exiting soon anyway.
+      }
+    }
+  }
+}
+
+async function fetchThroughBrowser(page, url) {
+  try {
+    const response = await page.goto(url, {
+      waitUntil: "networkidle2",
+      timeout: 15_000,
+    });
+    if (!response || !response.ok()) return null;
+    return await response.text();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Find Chrome (preferred) or Edge on the local machine. puppeteer-core does
+ * not bundle a browser — it needs an executablePath. On this project the
+ * dev machine is always Windows.
+ */
+function findChromeExecutable() {
+  const env = process.env.CHROME_EXECUTABLE_PATH;
+  if (env && fs.existsSync(env)) return env;
+
+  const candidates = [
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    process.env.LOCALAPPDATA
+      ? `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`
+      : null,
+    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium-browser",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  ];
+  for (const path of candidates) {
+    if (path && fs.existsSync(path)) return path;
+  }
+  return null;
+}
+
+async function tryFetch(urlString) {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12_000);
+    const response = await fetch(urlString, {
+      headers: {
+        "User-Agent": USER_AGENT,
+        Accept:
+          "text/html,application/xhtml+xml,application/xml,application/rss+xml,application/atom+xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      redirect: "follow",
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
+
+    if (!response.ok) return null;
+    const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
+    const body = await response.text();
+    const sniff = body.slice(0, 512);
+    const looksLikeFeed =
+      contentType.includes("xml") ||
+      contentType.includes("rss") ||
+      contentType.includes("atom") ||
+      /<\s*(rss|feed|channel)\b/i.test(sniff);
+    return { contentType, body, looksLikeFeed };
+  } catch {
+    return null;
+  }
+}
+
+function discoverFeedUrl(html, baseUrl) {
+  try {
+    const $ = cheerio.load(html);
+    const link = $(
+      'link[rel="alternate"][type*="rss" i], link[rel="alternate"][type*="atom" i]',
+    ).first();
+    const href = link.attr("href");
+    if (!href) return null;
+    return new URL(href, baseUrl).toString();
+  } catch {
+    return null;
+  }
+}
+
+function scrapeHtmlLinks(sourceId, html, baseUrl) {
+  try {
+    const $ = cheerio.load(html);
+    const seen = new Set();
+    const items = [];
+
+    $("a[href]").each((_, el) => {
+      if (items.length >= MAX_HTML_SCRAPE_ITEMS) return false;
+      const $el = $(el);
+      const href = $el.attr("href");
+      if (!href) return;
+
+      // Prefer visible link text; fall back to aria-label/title if empty.
+      let text = ($el.text() ?? "").replace(/\s+/g, " ").trim();
+      if (!text) text = ($el.attr("aria-label") ?? "").trim();
+      if (!text) text = ($el.attr("title") ?? "").trim();
+      if (!text || text.length < MIN_ANCHOR_TEXT_LEN) return;
+
+      let absolute;
+      try {
+        absolute = new URL(href, baseUrl).toString();
+      } catch {
+        return;
+      }
+      const canonical = canonicalUrl(absolute);
+      if (!canonical) return;
+
+      // Drop links that navigate to the same page (fragments, ".", etc.).
+      const dest = new URL(canonical);
+      if (dest.origin === baseUrl.origin && dest.pathname === baseUrl.pathname) return;
+      if (seen.has(canonical)) return;
+      seen.add(canonical);
+
+      items.push({
+        source: sourceId,
+        title: text.slice(0, MAX_ANCHOR_TEXT_LEN),
+        url: canonical,
+        summary: "",
+        tags: [],
+        publishedAt: null,
+        author: null,
+        raw: { fallback: "html-scrape" },
+      });
+    });
+
+    return items;
+  } catch {
+    return [];
+  }
+}
