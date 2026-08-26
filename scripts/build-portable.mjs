@@ -60,7 +60,8 @@ function exclusions(withAdmin) {
     ".git",
     "dist", // project build output — the bundle runs the dev server
     "data/logs", // historical scrape logs; the app writes fresh ones
-    ".claude", // editor/agent settings, not app code
+    ".claude", // editor/agent workspace settings, not app code
+    ".cursor",
     "serve.log",
     "node_modules/.vite", // dep cache holds absolute paths from THIS machine
   ];

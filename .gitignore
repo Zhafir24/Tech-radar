@@ -19,8 +19,11 @@ dist/
 Thumbs.db
 desktop.ini
 
-# Claude Code local settings (per-user)
-.claude/settings.local.json
+# Editor / AI-agent workspace settings — local to each developer, never
+# part of the project. The app has no dependency on any of these.
+.claude/
+.cursor/
+.aider*
 
 # Runtime & scrape logs
 serve.log
