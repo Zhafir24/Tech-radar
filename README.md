@@ -38,13 +38,14 @@ from 5173 upward, never terminates a process it does not own, opens the browser
 on whichever port it settled on, and stops with a diagnosis after repeated
 instant failures rather than looping.
 
-To rebuild the bundle yourself:
+To rebuild the bundle yourself (Windows only — it ships a Windows `node.exe`
+and a `.bat`, and the builder refuses to run elsewhere):
 
 ```bash
 npm run build:portable -- --out ./release
 ```
 
-### B. From source (any OS)
+### B. From source — macOS, Linux, Windows
 
 ```bash
 git clone https://github.com/Zhafir24/Tech-radar.git
@@ -60,8 +61,32 @@ npm run test:scrape
 Requires Node.js ≥ 20.19 (developed on Node 24 / Vite 7).
 
 `npm install` prints deprecation warnings from transitive dependencies and a
-note that esbuild's postinstall is gated by npm's allow-scripts policy. Both
-are expected and harmless — the build works regardless.
+note about esbuild's install script. Both are expected and harmless.
+
+## Platform support
+
+| | macOS | Linux | Windows |
+|---|:--:|:--:|:--:|
+| `npm run dev` / `build` / `preview` | ✅ | ✅ | ✅ |
+| `npm run scrape` (feeds + HTML tiers) | ✅ | ✅ | ✅ |
+| Browser tier (JavaScript-only sites) | ✅ | ✅ | ✅ |
+| `npm run serve` (auto-restarting supervisor) | ✅ | ✅ | ✅ |
+| `npm run autostart:*` | ❌ | ❌ | ✅ |
+| `npm run build:portable` | ❌ | ❌ | ✅ |
+
+**Browser tier.** Tier 5 of the scraper renders JavaScript-only sources with a
+real browser. `puppeteer-core` deliberately ships no browser, so the scraper
+looks for a Chromium-family one: an explicit `PUPPETEER_EXECUTABLE_PATH` (or
+`CHROME_EXECUTABLE_PATH`), then the standard install locations for your OS
+(including `~/Applications` on macOS), then a walk of `PATH` — which covers
+Homebrew, snap and nix installs. On macOS, installing Google Chrome normally
+is enough. If none is found the scraper logs
+`no Chrome/Edge found — cannot browser-render`, skips that one source, and the
+rest of the pipeline still completes.
+
+**Autostart** (`autostart:enable` / `autostart:disable`) registers a hidden
+Windows Startup shortcut and is Windows-only. On macOS use `launchd`, or just
+run `npm run dev` when you need it.
 
 ## Managing sources
 

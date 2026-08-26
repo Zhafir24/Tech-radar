@@ -99,14 +99,28 @@ function waitUntilServing(port, timeoutMs, isStale) {
 }
 
 function openBrowser(url) {
+  // Windows: `start` is a cmd builtin, and the empty "" is the window title it
+  // would otherwise steal from the first quoted argument.
+  // macOS: `open`. Linux: `xdg-open` (freedesktop standard).
+  const [command, args] =
+    process.platform === "win32"
+      ? ["cmd.exe", ["/c", "start", "", url]]
+      : process.platform === "darwin"
+        ? ["open", [url]]
+        : ["xdg-open", [url]];
+
   try {
-    // `start` is a cmd builtin; the empty "" is the window title that start
-    // otherwise steals from the first quoted argument.
-    spawn("cmd.exe", ["/c", "start", "", url], {
+    const child = spawn(command, args, {
       detached: true,
       stdio: "ignore",
       windowsHide: true,
-    }).unref();
+    });
+    // A missing xdg-open surfaces asynchronously as ENOENT, not as a throw.
+    child.on("error", () => {
+      log(`Could not open a browser automatically.`);
+      log(`Open this address manually: ${url}`);
+    });
+    child.unref();
   } catch (err) {
     log(`Could not open the browser automatically: ${err?.message ?? err}`);
     log(`Open this address manually: ${url}`);

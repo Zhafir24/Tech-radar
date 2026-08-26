@@ -252,6 +252,16 @@ function main() {
   const appDir = path.join(bundle, "app");
   const runtimeDir = path.join(bundle, "runtime");
 
+  // The bundle ships a Windows node.exe and a .bat launcher, so it can only be
+  // produced from a Windows runtime. Say so plainly rather than failing with a
+  // confusing "node.exe not found" on macOS or Linux.
+  if (process.platform !== "win32") {
+    throw new Error(
+      `The portable bundle targets Windows x64 and must be built on Windows ` +
+        `(this is ${process.platform}). On macOS and Linux, run the app from ` +
+        `source instead: npm install && npm run dev`,
+    );
+  }
   if (!fs.existsSync(path.join(nodeDir, "node.exe"))) {
     throw new Error(`node.exe not found in ${nodeDir} (pass --node <dir>)`);
   }

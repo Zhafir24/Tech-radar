@@ -29,6 +29,8 @@
  */
 import * as cheerio from "cheerio";
 import fs from "node:fs";
+import os from "node:os";
+import nodePath from "node:path";
 import { fetchRss } from "./rss.mjs";
 import { canonicalUrl } from "../normalize.mjs";
 import { log } from "../logger.mjs";
@@ -248,29 +250,114 @@ async function fetchThroughBrowser(page, url) {
 }
 
 /**
- * Find Chrome (preferred) or Edge on the local machine. puppeteer-core does
- * not bundle a browser — it needs an executablePath. On this project the
- * dev machine is always Windows.
+ * Known install locations for a Chromium-family browser, per platform.
+ * Ordered by preference: Chrome, then Chromium, then Edge, then Brave.
+ */
+function browserCandidates() {
+  const home = os.homedir();
+
+  if (process.platform === "darwin") {
+    // macOS ships apps as bundles; the real binary lives inside Contents/MacOS.
+    // Both /Applications (system-wide) and ~/Applications (per-user) are valid
+    // install targets, so check each.
+    const bundles = [
+      ["Google Chrome.app", "Google Chrome"],
+      ["Google Chrome Canary.app", "Google Chrome Canary"],
+      ["Chromium.app", "Chromium"],
+      ["Microsoft Edge.app", "Microsoft Edge"],
+      ["Brave Browser.app", "Brave Browser"],
+    ];
+    const roots = ["/Applications", nodePath.join(home, "Applications")];
+    return roots.flatMap((root) =>
+      bundles.map(([app, bin]) =>
+        nodePath.join(root, app, "Contents", "MacOS", bin),
+      ),
+    );
+  }
+
+  if (process.platform === "win32") {
+    const programFiles = [
+      process.env.PROGRAMFILES,
+      process.env["PROGRAMFILES(X86)"],
+      process.env.LOCALAPPDATA,
+    ].filter(Boolean);
+    const relative = [
+      ["Google", "Chrome", "Application", "chrome.exe"],
+      ["Chromium", "Application", "chrome.exe"],
+      ["Microsoft", "Edge", "Application", "msedge.exe"],
+      ["BraveSoftware", "Brave-Browser", "Application", "brave.exe"],
+    ];
+    return programFiles.flatMap((root) =>
+      relative.map((parts) => nodePath.join(root, ...parts)),
+    );
+  }
+
+  // Linux and other Unixes.
+  return [
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/snap/bin/chromium",
+    "/usr/bin/microsoft-edge",
+    "/usr/bin/brave-browser",
+  ];
+}
+
+/** Executable names to look for while walking PATH. */
+function browserBinaryNames() {
+  if (process.platform === "win32") {
+    return ["chrome.exe", "msedge.exe", "brave.exe"];
+  }
+  return [
+    "google-chrome",
+    "google-chrome-stable",
+    "chromium",
+    "chromium-browser",
+    "microsoft-edge",
+    "brave-browser",
+  ];
+}
+
+/**
+ * Find a Chromium-family browser for the tier-5 browser render. puppeteer-core
+ * deliberately does not bundle a browser, so it needs an explicit
+ * executablePath.
+ *
+ * Resolution order:
+ *   1. An explicit env override. PUPPETEER_EXECUTABLE_PATH is the convention
+ *      puppeteer itself uses, so honour it as well as our own variable — this
+ *      is the escape hatch when a browser lives somewhere unusual.
+ *   2. Known per-platform install locations.
+ *   3. A walk of PATH, which covers Homebrew, snap, nix, and other package
+ *      managers that install outside the standard directories.
+ *
+ * Returns null when nothing is found; the caller logs a warning and skips the
+ * browser tier rather than failing the whole scrape.
  */
 function findChromeExecutable() {
-  const env = process.env.CHROME_EXECUTABLE_PATH;
-  if (env && fs.existsSync(env)) return env;
-
-  const candidates = [
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-    process.env.LOCALAPPDATA
-      ? `${process.env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`
-      : null,
-    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-    "/usr/bin/google-chrome",
-    "/usr/bin/chromium-browser",
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-  ];
-  for (const path of candidates) {
-    if (path && fs.existsSync(path)) return path;
+  for (const key of [
+    "CHROME_EXECUTABLE_PATH",
+    "PUPPETEER_EXECUTABLE_PATH",
+    "CHROME_PATH",
+  ]) {
+    const value = process.env[key];
+    if (value && fs.existsSync(value)) return value;
   }
+
+  for (const candidate of browserCandidates()) {
+    if (candidate && fs.existsSync(candidate)) return candidate;
+  }
+
+  const names = browserBinaryNames();
+  for (const dir of (process.env.PATH ?? "").split(nodePath.delimiter)) {
+    if (!dir) continue;
+    for (const name of names) {
+      const full = nodePath.join(dir, name);
+      if (fs.existsSync(full)) return full;
+    }
+  }
+
   return null;
 }
 
