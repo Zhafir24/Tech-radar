@@ -39,7 +39,6 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const LOG_FILE = path.join(ROOT, "serve.log");
 const VITE_BIN = path.join(ROOT, "node_modules", "vite", "bin", "vite.js");
-const HAS_ADMIN = fs.existsSync(path.join(ROOT, "admin.html"));
 
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`;
@@ -197,7 +196,6 @@ async function start() {
       browserOpened = true;
       log(`Opening ${url}`);
       openBrowser(url);
-      if (HAS_ADMIN) openBrowser(`http://localhost:${port}/admin.html`);
     }
   }
 }

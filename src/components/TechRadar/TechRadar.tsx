@@ -31,8 +31,8 @@ export interface TechRadarProps {
   className?: string;
   /**
    * Controlled selection. When provided (including null), the component
-   * no longer manages selection internally — the parent owns it. Used by
-   * the admin console so radar clicks open the inspector.
+   * no longer manages selection internally — the parent owns it. Omit it
+   * (as the app does) to let the radar track selection itself.
    */
   selectedId?: string | null;
   /** Fires whenever a blip is selected (id) or deselected (null). */
@@ -51,8 +51,8 @@ export interface TechRadarProps {
  * Below the `xl` breakpoint everything stacks: title, radar, legends grid,
  * movement key.
  *
- * With `showLegends={false}` only the radar + movement key render — the
- * compact form used as the admin console's live preview.
+ * With `showLegends={false}` only the radar + movement key render, a compact
+ * form suitable for embedding the radar as a preview.
  */
 export function TechRadar({
   config = DEFAULT_RADAR_CONFIG,

@@ -1,6 +1,6 @@
 /**
  * Write the frontend snapshot at public/radar-data.json — same shape as
- * `RadarSnapshot` in src/components/TechRadar/persistence.ts.
+ * `RadarSnapshot` in src/components/TechRadar/types.ts.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -54,7 +54,6 @@ export function writeSnapshot(selected, baseConfig) {
     meta: {
       title: "Tech Radar",
       version: buildVersion(),
-      publishState: "published",
       publishedAt: new Date().toISOString(),
     },
     config: {

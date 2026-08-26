@@ -1,28 +1,16 @@
 # Tech Radar
 
-An enterprise-grade, data-driven Tech Radar for 80+ technologies, plus a
-connected **admin console** for managing it. React 19 · TypeScript (strict) ·
-Tailwind 4 · SVG.
+An enterprise-grade, data-driven Tech Radar for 100+ technologies, built from
+a self-hosted scraping pipeline. React 19 · TypeScript (strict) · Tailwind 4 ·
+SVG.
 
-Two entry points (Vite multi-page app):
+One page — `http://localhost:5173/` — rendering the radar plus a pipeline
+status bar. **The scraper is the single source of truth:** it writes
+`public/radar-data.json`, and the radar renders exactly that, falling back to
+the compiled-in `DEFAULT_RADAR_CONFIG` only when the file is unreachable.
 
-| Page | Dev URL | Purpose |
-|---|---|---|
-| Public radar | http://localhost:5173/ | Renders the radar + pipeline status; **Manage sources** lives here |
-| Admin console | http://localhost:5173/admin.html | Edit the **draft**, then publish |
-
-The public page resolves its data in priority order: the **published**
-snapshot from localStorage (admin override), then `/radar-data.json` written
-by the scraper, then the compiled-in `DEFAULT_RADAR_CONFIG`. Radar-only
-builds skip step 1 entirely.
-
-The admin edits a draft (autosaved to `localStorage["pnm-radar-draft"]`);
-**Publish** copies it to `localStorage["pnm-radar-published"]`, which the
-public page renders (and live-reloads via a `storage` listener when both are
-open on the same origin). To host the admin on a separate domain in
-production, deploy `dist/admin.html` behind e.g. `admin.example.com` and
-replace `src/components/TechRadar/persistence.ts` with an API client —
-localStorage does not cross origins, so a backend becomes mandatory there.
+You drive everything from the radar page itself: **Show details → Manage
+sources** to add a website, toggle a built-in source, or hit **Rescrape now**.
 
 ## Quick start
 
@@ -50,25 +38,11 @@ from 5173 upward, never terminates a process it does not own, opens the browser
 on whichever port it settled on, and stops with a diagnosis after repeated
 instant failures rather than looping.
 
-**From v1.5 the portable bundle is radar-only** — it ships without the admin
-console (see [Build variants](#build-variants)). Everything you need to drive
-the radar lives on the radar page itself: *Show details → Manage sources* to
-add a website, toggle a source, or hit **Rescrape now**.
-
-### Build variants
+To rebuild the bundle yourself:
 
 ```bash
-npm run build:portable -- --out ./release              # radar-only (default)
-npm run build:portable -- --out ./release --with-admin # radar + admin console
+npm run build:portable -- --out ./release
 ```
-
-The radar-only variant omits `src/admin/` and `admin.html`, and sets
-`VITE_RADAR_ONLY=true` in the staged app. That flag also makes
-[src/App.tsx](src/App.tsx) ignore the `pnm-radar-published` localStorage
-override: that key exists purely so the admin console can pin a curated
-snapshot, and with no admin console shipped there would be no UI to clear
-it — a snapshot left behind by a full build (same origin, therefore the same
-localStorage) would otherwise freeze the radar on stale data.
 
 ### B. From source (any OS)
 
@@ -76,55 +50,75 @@ localStorage) would otherwise freeze the radar on stale data.
 git clone https://github.com/Zhafir24/Tech-radar.git
 cd Tech-radar
 npm install
-npm run dev        # public: /   admin: /admin.html
-npm run build      # type-checks (tsc --noEmit) then bundles both entries to dist/
+npm run dev        # http://localhost:5173/
+npm run build      # type-checks (tsc --noEmit) then bundles to dist/
 npm run preview    # serve the production build
+npm run scrape     # run the pipeline once from the CLI
+npm run test:scrape
 ```
 
 Requires Node.js ≥ 20.19 (developed on Node 24 / Vite 7).
 
-## Admin console
+`npm install` prints deprecation warnings from transitive dependencies and a
+note that esbuild's postinstall is gated by npm's allow-scripts policy. Both
+are expected and harmless — the build works regardless.
 
-- **Dashboard** — publish state, item counts, distribution, live mini preview.
-- **Items** — searchable/filterable/sortable table of all 81 entries with bulk
-  select (hide/show/move ring/delete), pagination, kebab actions, an Item
-  Details panel, and analytics cards (donut by ring, bars by quadrant,
-  movement summary).
-- **Radar Editor** — the real `TechRadar` component rendering the draft;
-  clicking a blip opens the inspector (name, ring, quadrant, movement,
-  visibility, description, since/owner, auto vs. manual polar position with
-  bounded sliders). Every edit re-renders the radar instantly.
-- **Configuration** — radar title/version, blip size, ring labels + colors,
-  quadrant labels, publish/discard, JSON export/import, CSV export, reset.
-- **Workflow** — autosaved draft, unsaved-changes bar with Discard/Publish,
-  toasts, confirmation dialogs. Sidebar entries marked "Soon" (Reports, Users,
-  …) are visual stubs from the reference mockup, not functional pages.
+## Managing sources
+
+Everything is on the radar page — click **Show details** in the status bar,
+then **Manage sources**:
+
+- **Built-in sources** — toggle dev.to, GitHub Trending, The Hacker News,
+  InfoQ, Lobste.rs on or off.
+- **Custom websites** — paste any URL and click **Add**. The name is optional
+  (the domain is used if blank). Feeds are auto-detected; otherwise the
+  homepage is scraped for article links. JavaScript-only sites may yield 0
+  items.
+- **Rescrape now** — runs the pipeline immediately; progress streams into the
+  dialog footer and the radar refreshes itself when the run finishes.
+
+The `/api/sources` and `/api/scrape` endpoints backing this dialog are Vite
+dev-server middleware ([scripts/api/sources-api.mjs](scripts/api/sources-api.mjs)),
+so they exist only while the dev server runs. A statically deployed `dist/`
+has no backend, and the dialog reports that clearly instead of failing
+silently.
 
 ## Project structure
 
 ```
 src/
-├── App.tsx                          # Page shell (centers the radar card)
+├── App.tsx                          # Fetches /radar-data.json, renders the page
 ├── main.tsx
 ├── index.css                        # Tailwind, Inter font, interaction CSS
-└── components/TechRadar/
-    ├── index.ts                     # Public barrel export
-    ├── TechRadar.tsx                # Card + responsive grid (radar + 4 legends + key)
-    ├── RadarSVG.tsx                 # Single square SVG composition
-    ├── RadarRing.tsx                # One concentric maturity ring
-    ├── RadarAxis.tsx                # Dashed crosshair + center point
-    ├── RadarLabel.tsx               # Ring labels (EMERGING/ASSESS/TRIAL/ADOPT)
-    ├── RadarBlip.tsx                # Circle / triangle-up / triangle-down / star + number
-    ├── RadarLegend.tsx              # Corner quadrant legend (icon + 2-col ring lists)
-    ├── MovementLegend.tsx           # Bottom key: Moved up / down / New / No change
-    ├── CategoryIcon.tsx             # Outline glyphs (server / ai / shield / database)
-    ├── Tooltip.tsx                  # Lazy HTML tooltip overlaid on the SVG
-    ├── radarConfig.ts               # DEFAULT_RADAR_CONFIG + resolveBlips()
-    ├── types.ts                     # Full type model + STATUS_COLORS
-    └── utils/
-        ├── polar.ts                 # Polar ↔ Cartesian
-        ├── random.ts                # FNV-1a hash + mulberry32 PRNG
-        └── scatter.ts               # Deterministic scatter with Lloyd relaxation
+└── components/
+    ├── PipelineStatus.tsx           # Status bar + expandable diagnostics panel
+    ├── ManageSourcesModal.tsx       # Add/toggle sources, trigger a rescrape
+    └── TechRadar/
+        ├── index.ts                 # Public barrel export
+        ├── TechRadar.tsx            # Card + responsive grid (radar + 4 legends + key)
+        ├── RadarSVG.tsx             # Single square SVG composition
+        ├── RadarRing.tsx            # One concentric maturity ring
+        ├── RadarAxis.tsx            # Dashed crosshair + center point
+        ├── RadarLabel.tsx           # Ring labels (EMERGING/ASSESS/TRIAL/ADOPT)
+        ├── RadarBlip.tsx            # Circle / triangle / star + number
+        ├── RadarLegend.tsx          # Corner quadrant legend (icon + ring lists)
+        ├── MovementLegend.tsx       # Key: Moved up / down / New / No change
+        ├── CategoryIcon.tsx         # Outline glyphs (server/ai/shield/database)
+        ├── Tooltip.tsx              # Lazy HTML tooltip overlaid on the SVG
+        ├── radarConfig.ts           # DEFAULT_RADAR_CONFIG + resolveBlips()
+        ├── types.ts                 # Type model, RadarSnapshot, STATUS_COLORS
+        └── utils/
+            ├── polar.ts             # Polar ↔ Cartesian
+            ├── random.ts            # FNV-1a hash + mulberry32 PRNG
+            ├── shapes.ts            # Triangle / star point generators
+            └── scatter.ts           # Deterministic scatter + Lloyd relaxation
+
+scripts/
+├── scrape/                          # The pipeline (fetch → normalize → score → write)
+├── api/sources-api.mjs              # /api/sources + /api/scrape dev middleware
+├── serve.mjs                        # Dev supervisor (reclaims port 5173)
+├── serve-portable.mjs               # Bundle launcher (takes first FREE port)
+└── build-portable.mjs               # Builds the extract-and-run Windows bundle
 ```
 
 ## Data model

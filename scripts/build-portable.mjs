@@ -2,7 +2,7 @@
 /**
  * Build the portable, extract-and-run Windows bundle.
  *
- *   node scripts/build-portable.mjs --out <dir> [--with-admin] [--node <dir>]
+ *   node scripts/build-portable.mjs --out <dir> [--node <dir>]
  *
  * Produces:
  *
@@ -11,16 +11,6 @@
  *   ├── app/                     project + node_modules + current data
  *   ├── Start Tech Radar.bat     launcher
  *   └── README.txt               end-user quick start
- *
- * By default the admin console is EXCLUDED (`src/admin/`, `admin.html`) and
- * the staged app gets a `.env` setting `VITE_RADAR_ONLY=true`, which makes
- * src/App.tsx ignore the `pnm-radar-published` localStorage override. That
- * override exists only so the admin console can pin a curated snapshot; with
- * no admin console shipped there would be no way to clear it, so a snapshot
- * left over from a full build (same origin — localhost:5173 — hence the same
- * localStorage) would silently freeze the radar on stale data.
- *
- * Pass --with-admin to build the full two-page bundle instead.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -32,11 +22,10 @@ const ROOT = path.resolve(HERE, "..");
 /* ─────────────────────────── args ─────────────────────────── */
 
 function parseArgs(argv) {
-  const args = { withAdmin: false, out: null, node: null };
+  const args = { out: null, node: null };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--with-admin") args.withAdmin = true;
-    else if (arg === "--out") args.out = argv[++i];
+    if (arg === "--out") args.out = argv[++i];
     else if (arg === "--node") args.node = argv[++i];
     else throw new Error(`Unknown argument: ${arg}`);
   }
@@ -55,17 +44,16 @@ function defaultNodeDir() {
  * Paths excluded from the staged app, relative to ROOT and compared
  * case-insensitively (Windows). Anything at or below these is skipped.
  */
-function exclusions(withAdmin) {
-  const shared = [
+function exclusions() {
+  return [
     ".git",
     "dist", // project build output — the bundle runs the dev server
     "data/logs", // historical scrape logs; the app writes fresh ones
     ".claude", // editor/agent workspace settings, not app code
     ".cursor",
     "serve.log",
-    "node_modules/.vite", // dep cache holds absolute paths from THIS machine
+    "node_modules/.vite", // dep cache is rebuilt on the target machine
   ];
-  return withAdmin ? shared : [...shared, "src/admin", "admin.html"];
 }
 
 function makeFilter(excluded) {
@@ -141,24 +129,7 @@ pause
 exit /b 1
 `;
 
-function readme({ withAdmin, version }) {
-  const adminLine = withAdmin
-    ? `     - Admin console  http://localhost:5173/admin.html\n`
-    : "";
-  const adminSection = withAdmin
-    ? ""
-    : `
-WHAT'S NOT INCLUDED
--------------------
-
-This is the RADAR-ONLY build: the admin console (manual blip editing,
-draft/publish workflow) is not shipped. The radar is driven entirely by the
-scraper, which you control from the "Manage sources" dialog described above.
-
-If you want the admin console, build from source with the full config -
-see https://github.com/Zhafir24/Tech-radar
-`;
-
+function readme({ version }) {
   return `Tech Radar ${version} - Portable Edition (Windows x64)
 =====================================================
 
@@ -177,7 +148,9 @@ QUICK START
 
 3. A console window opens with the server log, and your browser opens by
    itself once the server is ready:
-${`     - Radar          http://localhost:5173/\n`}${adminLine}
+
+     - Radar          http://localhost:5173/
+
    First start takes ~10 seconds while Vite prebundles dependencies.
 
    If port 5173 is already taken by something else, the launcher quietly
@@ -213,7 +186,7 @@ WHAT'S INSIDE
    app\\                   The Tech Radar project + node_modules + data
    Start Tech Radar.bat   Launcher
    README.txt             This file
-${adminSection}
+
 
 FIRST-RUN NOTES
 ---------------
@@ -284,7 +257,6 @@ function main() {
   }
 
   console.log(`Building ${version} portable bundle`);
-  console.log(`  variant : ${args.withAdmin ? "full (radar + admin)" : "radar-only"}`);
   console.log(`  runtime : ${nodeDir}`);
   console.log(`  output  : ${bundle}`);
 
@@ -294,33 +266,14 @@ function main() {
   console.log("- staging app (this copies node_modules; takes a minute)...");
   fs.cpSync(ROOT, appDir, {
     recursive: true,
-    filter: makeFilter(exclusions(args.withAdmin)),
+    filter: makeFilter(exclusions()),
   });
 
   console.log("- copying Node.js runtime...");
   fs.cpSync(nodeDir, runtimeDir, { recursive: true });
 
-  if (!args.withAdmin) {
-    // Belt and braces: fail loudly if the filter ever regresses.
-    for (const leftover of ["src/admin", "admin.html"]) {
-      const full = path.join(appDir, leftover);
-      if (fs.existsSync(full)) {
-        throw new Error(`admin artefact leaked into the bundle: ${leftover}`);
-      }
-    }
-    fs.writeFileSync(
-      path.join(appDir, ".env"),
-      "# Radar-only build — see scripts/build-portable.mjs\nVITE_RADAR_ONLY=true\n",
-      "utf8",
-    );
-  }
-
   fs.writeFileSync(path.join(bundle, "Start Tech Radar.bat"), LAUNCHER, "utf8");
-  fs.writeFileSync(
-    path.join(bundle, "README.txt"),
-    readme({ withAdmin: args.withAdmin, version }),
-    "utf8",
-  );
+  fs.writeFileSync(path.join(bundle, "README.txt"), readme({ version }), "utf8");
 
   // Sanity-check the pieces the launcher depends on.
   const required = [

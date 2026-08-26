@@ -80,7 +80,7 @@ export interface BlipDefinition {
   hidden?: boolean;
   /** Radar edition in which the item first appeared (display metadata). */
   since?: string;
-  /** ISO timestamp of the last admin edit (display metadata). */
+  /** ISO timestamp of the last update to this entry (display metadata). */
   updatedAt?: string;
   /** Team or person responsible for the entry (display metadata). */
   owner?: string;
@@ -139,6 +139,23 @@ export interface RadarConfig {
   rings: RingDefinition[];
   quadrants: QuadrantDefinition[];
   blips: BlipDefinition[];
+}
+
+/** Display metadata that accompanies a radar edition. */
+export interface RadarMeta {
+  title: string;
+  version: string;
+  /** ISO timestamp of the edition, or null if unknown. */
+  publishedAt: string | null;
+}
+
+/**
+ * On-the-wire shape of `public/radar-data.json`, written by the scraper
+ * (see scripts/scrape/pipeline/write.mjs) and fetched by src/App.tsx.
+ */
+export interface RadarSnapshot {
+  meta: RadarMeta;
+  config: RadarConfig;
 }
 
 /**

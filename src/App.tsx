@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TechRadar } from "./components/TechRadar";
 import { PipelineStatus, blipNameMap } from "./components/PipelineStatus";
-import {
-  PUBLISHED_KEY,
-  loadSnapshot,
-  type RadarSnapshot,
-} from "./components/TechRadar/persistence";
+import type { RadarSnapshot } from "./components/TechRadar/types";
 import { DEFAULT_RADAR_CONFIG } from "./components/TechRadar/radarConfig";
 
 /**
@@ -15,15 +11,6 @@ import { DEFAULT_RADAR_CONFIG } from "./components/TechRadar/radarConfig";
  * the async fetch resolves.
  */
 const SCRAPED_CACHE_KEY = "pnm-radar-scraped-cache";
-
-/**
- * Radar-only builds ship without the admin console (see
- * `npm run build:portable`). There is then no UI that can write or clear
- * `pnm-radar-published`, so honouring a leftover published snapshot would
- * pin the radar to stale data forever — both builds share the same origin,
- * and therefore the same localStorage. Ignore the override entirely.
- */
-const RADAR_ONLY = import.meta.env.VITE_RADAR_ONLY === "true";
 
 function loadScrapedCache(): RadarSnapshot | null {
   try {
@@ -54,22 +41,16 @@ function saveScrapedCache(snapshot: RadarSnapshot): void {
 
 /**
  * Public radar. Data source resolution, in priority order:
- *   1. localStorage published snapshot (admin console override — user
- *      intent takes precedence over automation; skipped in RADAR_ONLY builds)
- *   2. /radar-data.json served by Vite (scraper output)
- *   3. Compiled-in DEFAULT_RADAR_CONFIG (offline fallback)
+ *   1. /radar-data.json served by Vite (scraper output)
+ *   2. Compiled-in DEFAULT_RADAR_CONFIG (offline fallback)
  *
- * A `storage` listener keeps the page live when the admin publishes from
- * another tab on the same origin.
- *
- * The PipelineStatus widget above the radar surfaces the scraper's
- * per-source stats and change diff so it's obvious whether the pipeline
- * actually ran and whether anything changed since the last edition.
+ * The scraper is the single source of truth: what it writes is what the
+ * radar shows. Add or toggle sources and trigger a run from the
+ * PipelineStatus widget above the radar, which also surfaces per-source
+ * stats and the change diff so it's obvious whether the pipeline actually
+ * ran and whether anything moved since the last edition.
  */
 export default function App() {
-  const [snapshot, setSnapshot] = useState<RadarSnapshot | null>(() =>
-    RADAR_ONLY ? null : loadSnapshot(PUBLISHED_KEY),
-  );
   // Seed from localStorage cache so the first paint already has real data
   // instead of flashing the compiled-in defaults.
   const [scraped, setScraped] = useState<RadarSnapshot | null>(loadScrapedCache);
@@ -106,18 +87,7 @@ export default function App() {
     return () => controller.abort();
   }, [fetchScraped]);
 
-  useEffect(() => {
-    if (RADAR_ONLY) return;
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === PUBLISHED_KEY) {
-        setSnapshot(loadSnapshot(PUBLISHED_KEY));
-      }
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
-
-  const source = snapshot ?? scraped;
+  const source = scraped;
   const config = source?.config ?? DEFAULT_RADAR_CONFIG;
   const title = source?.meta.title ?? "Tech Radar";
   const version = source?.meta.version ?? "2026.05";
