@@ -257,7 +257,10 @@ function validateExternalUrl(input) {
     return { error: "URL must use http or https" };
   }
 
-  const host = parsed.hostname.toLowerCase();
+  // WHATWG URL returns IPv6 literals wrapped in brackets ("[::1]"), which
+  // neither net.isIP() nor the literal comparisons below would ever match.
+  // Strip them or the whole IPv6 half of this guard is dead code.
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (
     host === "localhost" ||
     host === "0.0.0.0" ||
@@ -289,5 +292,26 @@ function isPrivateIp(host) {
   if (host === "::1" || host === "::") return true;
   if (/^fc[0-9a-f]{2}:/i.test(host) || /^fd[0-9a-f]{2}:/i.test(host)) return true;
   if (/^fe80:/i.test(host)) return true;
+
+  // IPv4-mapped IPv6 (::ffff:127.0.0.1) reaches the same host as the bare IPv4
+  // address, so judge it by the address it maps to. Node normalises the dotted
+  // form to hex pairs (::ffff:7f00:1), so accept both spellings.
+  const mapped = /^::ffff:(.+)$/i.exec(host);
+  if (mapped) {
+    const tail = mapped[1];
+    if (net.isIPv4(tail)) return isPrivateIp(tail);
+    const pair = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(tail);
+    if (pair) {
+      const high = parseInt(pair[1], 16);
+      const low = parseInt(pair[2], 16);
+      const dotted = [
+        (high >> 8) & 0xff,
+        high & 0xff,
+        (low >> 8) & 0xff,
+        low & 0xff,
+      ].join(".");
+      return isPrivateIp(dotted);
+    }
+  }
   return false;
 }
