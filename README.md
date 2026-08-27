@@ -58,7 +58,8 @@ npm run scrape     # run the pipeline once from the CLI
 npm run test:scrape
 ```
 
-Requires Node.js ≥ 20.19 (developed on Node 24 / Vite 7).
+Requires Node.js ≥ 22.12 (developed on Node 24 / Vite 7). The floor comes from
+`puppeteer-core`, which the scraper's browser tier depends on.
 
 `npm install` prints deprecation warnings from transitive dependencies and a
 note about esbuild's install script. Both are expected and harmless.

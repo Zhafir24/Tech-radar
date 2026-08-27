@@ -1,6 +1,10 @@
 /**
  * HTTP helper: retry with exponential backoff, timeout, sensible headers.
+ *
+ * Every request goes through guardedFetch, which re-validates each redirect
+ * hop against the SSRF guard. See scripts/scrape/url-guard.mjs.
  */
+import { guardedFetch } from "./url-guard.mjs";
 
 const DEFAULT_UA =
   "PNM-Tech-Radar-Scraper/1.0 (+https://example.invalid/radar; contact@example.invalid)";
@@ -40,10 +44,9 @@ export async function fetchWithRetry(url, options = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(url, {
+      const response = await guardedFetch(url, {
         headers: finalHeaders,
         signal: controller.signal,
-        redirect: "follow",
       });
       clearTimeout(timer);
 

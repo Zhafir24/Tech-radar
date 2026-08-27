@@ -34,6 +34,7 @@ import nodePath from "node:path";
 import { fetchRss } from "./rss.mjs";
 import { canonicalUrl } from "../normalize.mjs";
 import { log } from "../logger.mjs";
+import { guardedFetch, validateExternalUrl } from "../url-guard.mjs";
 
 const USER_AGENT =
   "Mozilla/5.0 (compatible; TechRadar/1.0; +https://example.invalid/radar)";
@@ -365,14 +366,13 @@ async function tryFetch(urlString) {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 12_000);
-    const response = await fetch(urlString, {
+    const response = await guardedFetch(urlString, {
       headers: {
         "User-Agent": USER_AGENT,
         Accept:
           "text/html,application/xhtml+xml,application/xml,application/rss+xml,application/atom+xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
       },
-      redirect: "follow",
       signal: controller.signal,
     }).finally(() => clearTimeout(timer));
 
@@ -399,7 +399,17 @@ function discoverFeedUrl(html, baseUrl) {
     ).first();
     const href = link.attr("href");
     if (!href) return null;
-    return new URL(href, baseUrl).toString();
+    const resolved = new URL(href, baseUrl).toString();
+    // The href comes from the page we just scraped, i.e. it is attacker
+    // controlled. Without this check a hostile page could point us at
+    // http://127.0.0.1/... and have the response ingested as radar content.
+    if (validateExternalUrl(resolved).error) {
+      log.warn("ignoring autodiscovered feed pointing at a non-public host", {
+        feedUrl: resolved,
+      });
+      return null;
+    }
+    return resolved;
   } catch {
     return null;
   }

@@ -17,13 +17,13 @@
  * reach internal services.
  */
 import { spawn } from "node:child_process";
-import net from "node:net";
 import {
   loadSourcesConfig,
   saveSourcesConfig,
   idForUrl,
   isBuiltIn,
 } from "../scrape/config.mjs";
+import { validateExternalUrl } from "../scrape/url-guard.mjs";
 
 const scrapeState = {
   running: false,
@@ -36,11 +36,39 @@ const scrapeState = {
 
 const MAX_TAIL_LINES = 60;
 
+/**
+ * Reject cross-site state-changing requests.
+ *
+ * This API has no auth — it trusts that only the local radar page calls it.
+ * But a browser will happily send a cross-origin POST from any page the user
+ * happens to be visiting, and a text/plain body is CORS-safelisted so there is
+ * no preflight to stop it. Without this check, any website could add scrape
+ * sources or start scrapes on the user's machine.
+ */
+function isCrossSite(req) {
+  const origin = req.headers.origin;
+  if (!origin) return false; // Same-origin fetch/XHR omits Origin for GET; non-browser clients too.
+  try {
+    return new URL(origin).hostname !== "localhost" &&
+      new URL(origin).hostname !== "127.0.0.1" &&
+      new URL(origin).hostname !== "[::1]" &&
+      new URL(origin).hostname !== "::1";
+  } catch {
+    return true;
+  }
+}
+
 export async function handleSourcesApi(req, res) {
   try {
     const parsed = new URL(req.url ?? "/", "http://localhost");
     const pathname = parsed.pathname;
     const method = req.method ?? "GET";
+
+    if (method !== "GET" && isCrossSite(req)) {
+      return json(res, 403, {
+        error: "cross-site request refused",
+      });
+    }
 
     if (pathname === "/api/sources" && method === "GET") {
       return json(res, 200, loadSourcesConfig());
@@ -193,7 +221,11 @@ function startScrape(res) {
   child.on("error", (err) => {
     scrapeState.lastError = err?.message ?? String(err);
   });
-  child.on("exit", (code) => {
+  // Reset on "close", not "exit". A failed spawn (npm missing from PATH — the
+  // normal case on macOS under nvm/Homebrew when the editor launched the dev
+  // server) emits "error" and "close" but NEVER "exit", so resetting only in
+  // "exit" left running=true forever and every later rescrape returned 409.
+  child.on("close", (code) => {
     scrapeState.running = false;
     scrapeState.lastExitCode = code;
     scrapeState.finishedAt = new Date().toISOString();
@@ -238,80 +270,4 @@ async function readJson(req) {
   });
 }
 
-/**
- * Reject any URL that would let a user turn the scraper into an SSRF vector
- * (internal services, cloud metadata, loopback). We check the hostname
- * literally *and* — if it's an IP — whether it falls in a private range.
- */
-function validateExternalUrl(input) {
-  if (!input) return { error: "url is required" };
-  if (input.length > 500) return { error: "url is too long" };
 
-  let parsed;
-  try {
-    parsed = new URL(input);
-  } catch {
-    return { error: "invalid URL" };
-  }
-  if (!/^https?:$/.test(parsed.protocol)) {
-    return { error: "URL must use http or https" };
-  }
-
-  // WHATWG URL returns IPv6 literals wrapped in brackets ("[::1]"), which
-  // neither net.isIP() nor the literal comparisons below would ever match.
-  // Strip them or the whole IPv6 half of this guard is dead code.
-  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (
-    host === "localhost" ||
-    host === "0.0.0.0" ||
-    host.endsWith(".local") ||
-    host.endsWith(".internal")
-  ) {
-    return { error: "URL points to a local/internal host — not allowed" };
-  }
-  if (net.isIP(host)) {
-    if (isPrivateIp(host)) {
-      return { error: "URL points to a private IP range — not allowed" };
-    }
-  }
-  return { ok: true };
-}
-
-function isPrivateIp(host) {
-  if (net.isIPv4(host)) {
-    const p = host.split(".").map(Number);
-    if (p[0] === 10) return true;
-    if (p[0] === 127) return true;
-    if (p[0] === 169 && p[1] === 254) return true; // link-local, incl. cloud metadata 169.254.169.254
-    if (p[0] === 172 && p[1] >= 16 && p[1] <= 31) return true;
-    if (p[0] === 192 && p[1] === 168) return true;
-    if (p[0] === 0) return true;
-    return false;
-  }
-  // IPv6: loopback and unique-local ranges.
-  if (host === "::1" || host === "::") return true;
-  if (/^fc[0-9a-f]{2}:/i.test(host) || /^fd[0-9a-f]{2}:/i.test(host)) return true;
-  if (/^fe80:/i.test(host)) return true;
-
-  // IPv4-mapped IPv6 (::ffff:127.0.0.1) reaches the same host as the bare IPv4
-  // address, so judge it by the address it maps to. Node normalises the dotted
-  // form to hex pairs (::ffff:7f00:1), so accept both spellings.
-  const mapped = /^::ffff:(.+)$/i.exec(host);
-  if (mapped) {
-    const tail = mapped[1];
-    if (net.isIPv4(tail)) return isPrivateIp(tail);
-    const pair = /^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i.exec(tail);
-    if (pair) {
-      const high = parseInt(pair[1], 16);
-      const low = parseInt(pair[2], 16);
-      const dotted = [
-        (high >> 8) & 0xff,
-        high & 0xff,
-        (low >> 8) & 0xff,
-        low & 0xff,
-      ].join(".");
-      return isPrivateIp(dotted);
-    }
-  }
-  return false;
-}
