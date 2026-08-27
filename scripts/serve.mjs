@@ -60,14 +60,16 @@ const IS_WINDOWS = process.platform === "win32";
 /**
  * PIDs currently listening on `port`.
  *
- * Windows has netstat; macOS and Linux use lsof, which is preinstalled on
- * macOS and present on most Linux images. If the tool is missing or fails we
- * return nothing, and the caller simply skips the kill — the same degraded
- * path Windows already had.
+ * Windows has netstat. Elsewhere we try lsof first — macOS always ships it —
+ * and fall back to procfs, because many Linux images have NO tool that can
+ * answer this: the official node:24-bookworm image carries neither lsof nor
+ * ss, fuser, netstat or ip. Returning nothing there is not a safe degradation:
+ * killPort() then silently does nothing, Vite fails on --strictPort, and the
+ * supervisor respawns it every two seconds forever.
  */
 function listeningPids(port) {
-  try {
-    if (IS_WINDOWS) {
+  if (IS_WINDOWS) {
+    try {
       const output = execSync("netstat -ano -p tcp", { encoding: "utf8" });
       const pattern = new RegExp(
         `\\s(?:0\\.0\\.0\\.0|127\\.0\\.0\\.1|\\[::\\]|\\[::1\\]):${port}\\s.*LISTENING\\s+(\\d+)`,
@@ -78,17 +80,75 @@ function listeningPids(port) {
         if (match) pids.add(match[1]);
       }
       return [...pids];
+    } catch {
+      return [];
     }
+  }
 
+  try {
     // -t: PIDs only, -sTCP:LISTEN: ignore established connections to the port.
     const output = execSync(`lsof -ti tcp:${port} -sTCP:LISTEN`, {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     });
-    return [...new Set(output.split(/\s+/).filter(Boolean))];
+    const pids = [...new Set(output.split(/\s+/).filter((s) => /^\d+$/.test(s)))];
+    if (pids.length > 0) return pids;
   } catch {
-    // lsof exits non-zero when nothing matches, and netstat can glitch.
-    // Either way there is nothing we can act on.
+    // lsof absent, or it exited non-zero because nothing matched. Both look
+    // the same from here, so always give procfs a chance.
+  }
+  return listeningPidsFromProc(port);
+}
+
+/**
+ * lsof-free fallback for Linux, via /proc. Finds the socket inodes listening
+ * on `port`, then the process holding a descriptor for one of them.
+ * Returns [] where /proc does not exist (macOS), leaving behaviour unchanged.
+ */
+function listeningPidsFromProc(port) {
+  try {
+    const inodes = new Set();
+    for (const file of ["/proc/net/tcp", "/proc/net/tcp6"]) {
+      let text;
+      try {
+        text = fs.readFileSync(file, "utf8");
+      } catch {
+        continue;
+      }
+      for (const line of text.split("\n").slice(1)) {
+        const cols = line.trim().split(/\s+/);
+        if (cols.length < 10 || cols[3] !== "0A") continue; // 0A = TCP_LISTEN
+        if (parseInt(cols[1].split(":")[1], 16) !== port) continue;
+        inodes.add(cols[9]);
+      }
+    }
+    if (inodes.size === 0) return [];
+
+    const pids = new Set();
+    for (const pid of fs.readdirSync("/proc")) {
+      if (!/^\d+$/.test(pid)) continue;
+      let fds;
+      try {
+        fds = fs.readdirSync(`/proc/${pid}/fd`);
+      } catch {
+        continue; // Another user's process — not ours to inspect or kill.
+      }
+      for (const fd of fds) {
+        let link;
+        try {
+          link = fs.readlinkSync(`/proc/${pid}/fd/${fd}`);
+        } catch {
+          continue;
+        }
+        const match = /^socket:\[(\d+)\]$/.exec(link);
+        if (match && inodes.has(match[1])) {
+          pids.add(pid);
+          break;
+        }
+      }
+    }
+    return [...pids];
+  } catch {
     return [];
   }
 }
@@ -113,8 +173,13 @@ function killPort(port) {
   }
 }
 
+/** An exit sooner than this after start counts as an instant failure. */
+const RAPID_EXIT_MS = 5000;
+const MAX_RAPID_FAILURES = 4;
+
 let child = null;
 let restartCount = 0;
+let rapidFailures = 0;
 let shuttingDown = false;
 
 async function startVite() {
@@ -125,6 +190,7 @@ async function startVite() {
   }
 
   log(`Starting Vite (attempt ${restartCount + 1})`);
+  const startedAt = Date.now();
   child = spawn(
     process.execPath,
     [VITE_BIN, "--port", String(PORT), "--strictPort", "--host", HOST],
@@ -133,12 +199,29 @@ async function startVite() {
 
   child.on("exit", (code, signal) => {
     if (shuttingDown) return;
+    child = null;
+
+    // Without a ceiling this loops forever at ~2s per attempt, spawning a
+    // process each time and growing serve.log with nobody watching — the
+    // autostart launcher runs it in a hidden window.
+    if (Date.now() - startedAt < RAPID_EXIT_MS) rapidFailures++;
+    else rapidFailures = 0;
+
+    if (rapidFailures > MAX_RAPID_FAILURES) {
+      log(
+        `Vite exited immediately ${rapidFailures} times in a row — giving up. ` +
+          `Something else is holding port ${PORT} and could not be freed; ` +
+          `close it and start again.`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+
     log(
       `Vite exited (code=${code ?? "null"}, signal=${signal ?? "none"}) — ` +
         `restarting in ${RESTART_DELAY_MS}ms`,
     );
     restartCount++;
-    child = null;
     setTimeout(startVite, RESTART_DELAY_MS);
   });
 

@@ -1,0 +1,11 @@
+# The index is 100% LF today, but nothing enforced it. A contributor with
+# core.autocrlf=false on Windows could commit CRLF into a script carrying a
+# shebang, which then fails on Linux with:
+#   bad interpreter: /usr/bin/env node^M
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.svg text eol=lf
+*.woff2 binary
+*.zip binary

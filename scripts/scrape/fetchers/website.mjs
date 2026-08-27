@@ -299,10 +299,31 @@ function browserCandidates() {
     "/usr/bin/google-chrome-stable",
     "/usr/bin/chromium",
     "/usr/bin/chromium-browser",
+    "/usr/local/bin/chrome",
     "/snap/bin/chromium",
     "/usr/bin/microsoft-edge",
     "/usr/bin/brave-browser",
+    "/var/lib/flatpak/exports/bin/com.google.Chrome",
+    // What `npx puppeteer browsers install chrome` produces — often the only
+    // browser on a headless Linux box.
+    ...puppeteerCacheChromes(home),
   ];
+}
+
+/** Chrome builds under ~/.cache/puppeteer, newest-looking first. */
+function puppeteerCacheChromes(home) {
+  const root = nodePath.join(home, ".cache", "puppeteer", "chrome");
+  try {
+    return fs
+      .readdirSync(root)
+      .sort()
+      .reverse()
+      .map((dir) =>
+        nodePath.join(root, dir, "chrome-linux64", "chrome"),
+      );
+  } catch {
+    return [];
+  }
 }
 
 /** Executable names to look for while walking PATH. */
@@ -313,11 +334,23 @@ function browserBinaryNames() {
   return [
     "google-chrome",
     "google-chrome-stable",
+    "chrome",
     "chromium",
     "chromium-browser",
     "microsoft-edge",
     "brave-browser",
   ];
+}
+
+/** True when `file` exists and is executable — a same-named directory is not. */
+function isExecutableFile(file) {
+  try {
+    if (!fs.statSync(file).isFile()) return false;
+    fs.accessSync(file, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -355,7 +388,8 @@ function findChromeExecutable() {
     if (!dir) continue;
     for (const name of names) {
       const full = nodePath.join(dir, name);
-      if (fs.existsSync(full)) return full;
+      // existsSync would also match a same-named directory.
+      if (isExecutableFile(full)) return full;
     }
   }
 
