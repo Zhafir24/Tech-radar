@@ -186,9 +186,20 @@ export function mergeWithStore(fresh, enabledSourceIds = null) {
   return restrictToEnabledSources(list, enabledSourceIds);
 }
 
+/** Source id that supplies the GitHub star/url/age metadata. */
+const GITHUB_SOURCE_ID = "github-trending";
+
 /**
  * Narrow a merged list to what the enabled sources actually support.
- * Returns a copy — the caller's stored objects are not mutated.
+ * Returns copies — the stored objects that were just persisted are untouched.
+ *
+ * Two things are stripped, so that a disabled source leaves no trace anywhere
+ * on the radar:
+ *   - mentions from sources that are off, and any tech left with none;
+ *   - GitHub star/url/age metadata, which is evidence gathered by the
+ *     github-trending source. Leaving it behind would keep "13.1k GitHub
+ *     stars" on a blip whose GitHub source the user has switched off, and
+ *     would keep inflating that tech's score.
  */
 function restrictToEnabledSources(list, enabledSourceIds) {
   if (!enabledSourceIds) return list;
@@ -196,8 +207,11 @@ function restrictToEnabledSources(list, enabledSourceIds) {
     enabledSourceIds instanceof Set ? enabledSourceIds : new Set(enabledSourceIds);
   if (enabled.size === 0) return list;
 
+  const githubEnabled = enabled.has(GITHUB_SOURCE_ID);
   const kept = [];
   let excluded = 0;
+  let starsStripped = 0;
+
   for (const tech of list) {
     const mentions = tech.mentions.filter((m) =>
       enabled.has(canonicalSourceId(m.source)),
@@ -206,12 +220,25 @@ function restrictToEnabledSources(list, enabledSourceIds) {
       excluded++;
       continue;
     }
-    kept.push({ ...tech, mentions });
+    const copy = { ...tech, mentions };
+    if (!githubEnabled && (copy.githubStars > 0 || copy.githubUrl)) {
+      copy.githubStars = 0;
+      copy.githubUrl = null;
+      copy.githubRepoAgeDays = null;
+      starsStripped++;
+    }
+    kept.push(copy);
   }
+
   if (excluded > 0) {
     log.info("techs held back — no enabled source vouches for them", {
       excluded,
       eligible: kept.length,
+    });
+  }
+  if (starsStripped > 0) {
+    log.info("GitHub metadata stripped — github-trending is disabled", {
+      techs: starsStripped,
     });
   }
   return kept;
