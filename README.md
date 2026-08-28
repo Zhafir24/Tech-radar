@@ -99,7 +99,7 @@ then **Manage sources**:
 - **Custom websites** — paste any URL and click **Add**. The name is optional
   (the domain is used if blank). Feeds are auto-detected; otherwise the
   homepage is scraped for article links. JavaScript-only sites may yield 0
-  items.
+  items. Each row has a toggle and a trash icon that removes it outright.
 - **Rescrape now** — runs the pipeline immediately; progress streams into the
   dialog footer and the radar refreshes itself when the run finishes.
 
@@ -108,6 +108,46 @@ dev-server middleware ([scripts/api/sources-api.mjs](scripts/api/sources-api.mjs
 so they exist only while the dev server runs. A statically deployed `dist/`
 has no backend, and the dialog reports that clearly instead of failing
 silently.
+
+### What a source change does to the radar
+
+Toggling, adding or removing a source only rewrites `data/sources-config.json`.
+Nothing on the radar moves until the next scrape reads that file, so use
+**Rescrape now** if you want to see the effect immediately.
+
+The pipeline collects the ids of the enabled sources, fetches only those, and
+then narrows the merged store to them (`restrictToEnabledSources` in
+[scripts/scrape/pipeline/aggregate.mjs](scripts/scrape/pipeline/aggregate.mjs)):
+
+- **A technology stays on the radar as long as at least one enabled source
+  mentions it.** It is *not* dropped merely because one of several contributing
+  sources was switched off — otherwise disabling a single source would delete
+  technologies that four other sources still report every day.
+- **Mentions from disabled sources are stripped from the technology** before
+  scoring, so evidence you switched off cannot prop a blip up. Distinct-source
+  and mention-count scores drop accordingly, which means a surviving blip can
+  still change ring or fall out of the top 100.
+- **Disabling and removing are the same thing to the pipeline** — either way the
+  id is simply absent from the enabled set. (Only custom sites can be removed;
+  the API refuses to delete a built-in and tells you to toggle it off instead.)
+- **`data/tech-store.json` is never pruned by any of this.** The complete merged
+  store is written to disk *before* the filter runs, so history survives.
+  Re-enabling a source — or re-adding a removed site, whose id is a
+  deterministic hash of its URL — restores its blips on the next scrape without
+  having to re-accumulate history.
+- **Disabling `github-trending` additionally strips GitHub metadata** (stars,
+  repo URL, repo age) from every technology, so a source you have switched off
+  cannot leave "13.1k GitHub stars" on a blip or keep feeding the star-based
+  ring and score heuristics.
+
+The practical consequence is that **disabling one source often changes nothing
+visible**: the other enabled sources still mention the same technologies. Only
+technologies for which it was the *last* remaining source disappear.
+
+At least one source must stay active. Disabling or deleting the last active one
+is refused with HTTP 400 and the dialog shows the message. If the config is
+edited by hand to leave none enabled, the pipeline stays consistent and writes
+an empty radar rather than falling back to the whole store.
 
 ## Project structure
 
