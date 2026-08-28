@@ -142,11 +142,42 @@ function deleteSource(res, id) {
     });
   }
   const config = loadSourcesConfig();
-  const before = config.custom.length;
+  if (!config.custom.some((c) => c.id === id)) {
+    return json(res, 404, { error: "not found" });
+  }
+  // Deleting can strand the radar with no source just as disabling can.
+  if (activeCountAfter(config, id, null) === 0) {
+    return json(res, 400, {
+      error: "cannot remove the last active source — enable another one first",
+    });
+  }
   config.custom = config.custom.filter((c) => c.id !== id);
-  if (config.custom.length === before) return json(res, 404, { error: "not found" });
   saveSourcesConfig(config);
   return json(res, 200, { deleted: id });
+}
+
+/**
+ * How many sources would still be active after a proposed change.
+ *
+ * `changedId` is the source being toggled or removed; pass `enabled: null` to
+ * count it as deleted. Covers built-ins AND customs — the previous guard only
+ * looked at built-ins, so disabling the last custom source dropped the count
+ * to zero and left the radar with no source at all.
+ */
+function activeCountAfter(config, changedId, enabled) {
+  let active = 0;
+  for (const [id, value] of Object.entries(config.builtIn)) {
+    const on = id === changedId ? enabled === true : value.enabled !== false;
+    if (on) active++;
+  }
+  for (const custom of config.custom) {
+    if (custom.id === changedId) {
+      if (enabled === true) active++;
+      continue;
+    }
+    if (custom.enabled !== false) active++;
+  }
+  return active;
 }
 
 async function toggleSource(req, res, id) {
@@ -156,23 +187,20 @@ async function toggleSource(req, res, id) {
 
   const config = loadSourcesConfig();
 
+  if (!isBuiltIn(id) && !config.custom.some((c) => c.id === id)) {
+    return json(res, 404, { error: "not found" });
+  }
+
+  if (!enabled && activeCountAfter(config, id, false) === 0) {
+    return json(res, 400, {
+      error: "cannot disable the last active source — enable another one first",
+    });
+  }
+
   if (isBuiltIn(id)) {
-    if (!enabled) {
-      const remaining = Object.entries(config.builtIn).filter(
-        ([otherId, v]) => otherId !== id && v.enabled !== false,
-      ).length;
-      const anyCustomActive = config.custom.some((c) => c.enabled !== false);
-      if (remaining === 0 && !anyCustomActive) {
-        return json(res, 400, {
-          error:
-            "cannot disable the last active source — enable another one first",
-        });
-      }
-    }
     config.builtIn[id] = { enabled };
   } else {
     const found = config.custom.find((c) => c.id === id);
-    if (!found) return json(res, 404, { error: "not found" });
     found.enabled = enabled;
   }
   saveSourcesConfig(config);

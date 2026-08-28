@@ -205,7 +205,17 @@ function restrictToEnabledSources(list, enabledSourceIds) {
   if (!enabledSourceIds) return list;
   const enabled =
     enabledSourceIds instanceof Set ? enabledSourceIds : new Set(enabledSourceIds);
-  if (enabled.size === 0) return list;
+
+  // An EMPTY set means "no source is enabled", so nothing is eligible. It does
+  // NOT mean "no filter". Treating it as no-filter returned the entire store,
+  // so turning every source off left the radar completely unchanged — the exact
+  // opposite of what the user asked for. `null` is the way to opt out.
+  if (enabled.size === 0) {
+    log.info("no sources enabled — radar has nothing to show", {
+      excluded: list.length,
+    });
+    return [];
+  }
 
   const githubEnabled = enabled.has(GITHUB_SOURCE_ID);
   const kept = [];
