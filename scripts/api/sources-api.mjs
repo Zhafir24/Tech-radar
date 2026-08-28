@@ -145,8 +145,12 @@ function deleteSource(res, id) {
   if (!config.custom.some((c) => c.id === id)) {
     return json(res, 404, { error: "not found" });
   }
-  // Deleting can strand the radar with no source just as disabling can.
-  if (activeCountAfter(config, id, null) === 0) {
+  // Deleting can strand the radar with no source just as disabling can — but
+  // only when the source being removed is currently active. An already-disabled
+  // source cannot lower the active count, so guarding it blocked cleanup with a
+  // "last active source" message that simply wasn't true.
+  const target = config.custom.find((c) => c.id === id);
+  if (target.enabled !== false && activeCountAfter(config, id, null) === 0) {
     return json(res, 400, {
       error: "cannot remove the last active source — enable another one first",
     });
@@ -183,7 +187,13 @@ function activeCountAfter(config, changedId, enabled) {
 async function toggleSource(req, res, id) {
   const body = await readJson(req);
   if (body.error) return json(res, 400, { error: body.error });
-  const enabled = body.value?.enabled !== false;
+  // Must be a real boolean. `!== false` read "false", 0, null and an empty body
+  // as "enable", so a client asking to DISABLE a source got HTTP 200 and an
+  // enabled source back — silently the opposite of the request.
+  const enabled = body.value?.enabled;
+  if (typeof enabled !== "boolean") {
+    return json(res, 400, { error: "enabled must be a boolean" });
+  }
 
   const config = loadSourcesConfig();
 

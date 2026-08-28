@@ -202,7 +202,22 @@ const GITHUB_SOURCE_ID = "github-trending";
  *     would keep inflating that tech's score.
  */
 function restrictToEnabledSources(list, enabledSourceIds) {
-  if (!enabledSourceIds) return list;
+  // Only a null/undefined sentinel means "do not filter". A plain falsy check
+  // also let `false`, `0`, `""` and `NaN` through as no-filter, which is the
+  // same shape as the bug where an empty Set returned the whole store.
+  if (enabledSourceIds == null) return list;
+  // A bare string is rejected on purpose: it IS iterable, so `"dev.to"` would
+  // silently become a Set of single characters that matches no source at all.
+  if (
+    typeof enabledSourceIds === "string" ||
+    typeof enabledSourceIds[Symbol.iterator] !== "function"
+  ) {
+    throw new TypeError(
+      "restrictToEnabledSources: enabledSourceIds must be a Set or iterable " +
+        "of source ids, or null/undefined to disable filtering — got " +
+        typeof enabledSourceIds,
+    );
+  }
   const enabled =
     enabledSourceIds instanceof Set ? enabledSourceIds : new Set(enabledSourceIds);
 
@@ -357,4 +372,8 @@ function saveStore(list) {
 }
 
 // Exported only for unit tests.
-export const __test__ = { validateStored, assignStableNumbers };
+export const __test__ = {
+  validateStored,
+  assignStableNumbers,
+  restrictToEnabledSources,
+};
