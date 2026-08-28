@@ -111,8 +111,24 @@ export function aggregate(mentions) {
  *   malformed (missing slug, invalid quadrant, non-array mentions).
  * - Preserves per-slug `number` across runs; assigns the next unused
  *   integer to newly-seen slugs.
+ *
+ * `enabledSourceIds` decides what the RADAR may show. The store on disk keeps
+ * everything — turning a source back on restores its blips on the next scrape
+ * without re-fetching history — but a technology is only returned when at
+ * least one currently-enabled source still vouches for it, and its mention
+ * list is narrowed to those sources so scoring is not inflated by evidence
+ * the user has switched off.
+ *
+ * Without this, disabling a source removed its fetch but not its blips: every
+ * technology it had ever contributed stayed in the store and kept being
+ * selected, so the radar never changed.
+ *
+ * Pass `null`/omit to keep every source (used by tooling that has no config).
+ *
+ * @param {Technology[]} fresh
+ * @param {Set<string>|string[]|null} [enabledSourceIds]
  */
-export function mergeWithStore(fresh) {
+export function mergeWithStore(fresh, enabledSourceIds = null) {
   const stored = loadStore();
   const merged = new Map();
 
@@ -162,9 +178,43 @@ export function mergeWithStore(fresh) {
   // 3. Assign stable numbers — reuse existing, allocate next-highest for new.
   assignStableNumbers(merged);
 
+  // The full list is what persists: history is never destroyed by toggling a
+  // source off, so toggling it back on restores those blips next run.
   const list = [...merged.values()];
   saveStore(list);
-  return list;
+
+  return restrictToEnabledSources(list, enabledSourceIds);
+}
+
+/**
+ * Narrow a merged list to what the enabled sources actually support.
+ * Returns a copy — the caller's stored objects are not mutated.
+ */
+function restrictToEnabledSources(list, enabledSourceIds) {
+  if (!enabledSourceIds) return list;
+  const enabled =
+    enabledSourceIds instanceof Set ? enabledSourceIds : new Set(enabledSourceIds);
+  if (enabled.size === 0) return list;
+
+  const kept = [];
+  let excluded = 0;
+  for (const tech of list) {
+    const mentions = tech.mentions.filter((m) =>
+      enabled.has(canonicalSourceId(m.source)),
+    );
+    if (mentions.length === 0) {
+      excluded++;
+      continue;
+    }
+    kept.push({ ...tech, mentions });
+  }
+  if (excluded > 0) {
+    log.info("techs held back — no enabled source vouches for them", {
+      excluded,
+      eligible: kept.length,
+    });
+  }
+  return kept;
 }
 
 /**

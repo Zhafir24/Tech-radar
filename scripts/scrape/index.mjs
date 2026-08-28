@@ -121,8 +121,12 @@ log.info("mentions extracted", { total: mentions.length });
 const freshTechs = aggregate(mentions);
 log.info("technologies aggregated", { fresh: freshTechs.length });
 
-const allTechs = mergeWithStore(freshTechs);
-log.info("store merged", { total: allTechs.length });
+// Only technologies vouched for by a currently-enabled source may reach the
+// radar. The store itself keeps everything, so re-enabling a source brings its
+// blips back on the next run without refetching history.
+const enabledSourceIds = new Set(sources.map((s) => s.id));
+const allTechs = mergeWithStore(freshTechs, enabledSourceIds);
+log.info("store merged", { eligible: allTechs.length });
 
 const scored = allTechs.map(score).sort((a, b) => b.overallScore - a.overallScore);
 const selected = selectTop(scored);
