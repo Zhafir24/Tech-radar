@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BlipDefinition } from "./TechRadar/types";
 import { ManageSourcesModal } from "./ManageSourcesModal";
+
+/**
+ * How often we re-read /radar-diagnostics.json. Doubles as the tick that
+ * refreshes the relative "last run" label, so the widget keeps one timer.
+ */
+const POLL_INTERVAL_MS = 30_000;
 
 /* ────────────────────────────────────────────────────────────────────────
  * Diagnostics schema — must match writeDiagnostics() output.
@@ -40,8 +46,12 @@ export interface Diagnostics {
 }
 
 interface PipelineStatusProps {
-  /** Called when the user clicks Refresh so the parent can re-fetch data. */
-  onRefresh: () => void;
+  /**
+   * Called when the parent should re-fetch /radar-data.json — on the Refresh
+   * button, and automatically once a scrape run is detected. Returning the
+   * promise lets the Refresh spinner stop only when the data has landed.
+   */
+  onRefresh: () => void | Promise<void>;
   /** Blip slug → display name, for resolving change slugs to human names. */
   blipNames?: Map<string, string>;
 }
@@ -54,6 +64,10 @@ interface PipelineStatusProps {
  *   - a health pill (green / amber / red)
  *   - a relative timestamp that ticks every 30 seconds
  *   - a Refresh button that re-fetches data + diagnostics
+ *
+ * The same 30-second tick re-reads the diagnostics file, so a scrape that
+ * finishes anywhere (terminal or dialog) pulls its new snapshot onto the
+ * radar without a page reload.
  *   - an expandable details panel with per-source stats, pipeline totals,
  *     distribution, and the diff vs the previous run
  *
@@ -68,6 +82,22 @@ export function PipelineStatus({ onRefresh, blipNames }: PipelineStatusProps) {
   const [now, setNow] = useState(() => Date.now());
   const [manageOpen, setManageOpen] = useState(false);
 
+  /**
+   * `generatedAt` of the run whose data the radar is currently showing.
+   * Compared on every diagnostics load to detect that a scrape finished.
+   */
+  const renderedRunAt = useRef<string | null>(null);
+
+  /**
+   * Held in a ref rather than a dependency so `fetchDiagnostics` stays
+   * identity-stable: it is in the dependency list of the mount effect and
+   * the poll below, and a changing `onRefresh` would restart both.
+   */
+  const onRefreshRef = useRef(onRefresh);
+  useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  }, [onRefresh]);
+
   const fetchDiagnostics = useCallback(async () => {
     setError(null);
     try {
@@ -77,6 +107,19 @@ export function PipelineStatus({ onRefresh, blipNames }: PipelineStatusProps) {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const parsed = (await response.json()) as Diagnostics;
       setData(parsed);
+
+      // A finished scrape rewrites radar-data.json and radar-diagnostics.json
+      // together, so a moved `generatedAt` is the page's only signal that the
+      // snapshot underneath it changed. Pull the new one instead of leaving
+      // the previous edition on screen until someone reloads by hand — that
+      // covers runs started from a terminal (`npm run scrape`) and runs whose
+      // Manage-sources dialog was closed before they finished, neither of
+      // which reaches the dialog's own onAfterScrape callback.
+      const previousRunAt = renderedRunAt.current;
+      renderedRunAt.current = parsed.generatedAt;
+      if (previousRunAt !== null && previousRunAt !== parsed.generatedAt) {
+        void onRefreshRef.current();
+      }
       return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -91,9 +134,12 @@ export function PipelineStatus({ onRefresh, blipNames }: PipelineStatusProps) {
   }, [fetchDiagnostics]);
 
   useEffect(() => {
-    const interval = window.setInterval(() => setNow(Date.now()), 30_000);
+    const interval = window.setInterval(() => {
+      setNow(Date.now());
+      void fetchDiagnostics();
+    }, POLL_INTERVAL_MS);
     return () => window.clearInterval(interval);
-  }, []);
+  }, [fetchDiagnostics]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
