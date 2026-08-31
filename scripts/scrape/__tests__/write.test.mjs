@@ -5,7 +5,13 @@ import path from "node:path";
 import os from "node:os";
 import { writeSnapshot, __test__ } from "../pipeline/write.mjs";
 
-const { sourceIdLabel, mentionSourceLabel, sourceLabel, buildDescription } = __test__;
+const {
+  sourceIdLabel,
+  mentionSourceLabel,
+  sourceLabel,
+  buildDescription,
+  pickAttributionMention,
+} = __test__;
 
 function mention(source, url, publishedAt = "2026-08-30T10:00:00.000Z") {
   return { slug: "kubernetes", source, url, title: "t", publishedAt, raw: {} };
@@ -191,6 +197,186 @@ test("buildDescription: built-in wording and star prefix are unchanged", () => {
   );
 });
 
+/* ───────────────── undated mentions (pickAttributionMention) ─────────────────
+ * The HTML link-scrape and browser-render fetcher tiers store publishedAt:null,
+ * so a technology can legitimately have no dated mention at all. Selecting only
+ * dated mentions dropped the ENTIRE attribution clause for those — 11 of 21
+ * blips on a real snapshot rendered a bare "1 recent mention" with no source.
+ */
+
+/** No date, exactly as fetchers/website.mjs writes an anchor it scraped. */
+function undatedMention(source, url) {
+  return mention(source, url, null);
+}
+
+/** Every way the description could betray a date it does not have. */
+function assertNoDateClaimed(description) {
+  assert.doesNotMatch(description, /\d{4}-\d{2}-\d{2}/, "leaked a date fragment");
+  // "Latest from DevURL on " with nothing after the "on".
+  assert.doesNotMatch(description, / on(?=\s*(·|$))/, "dangling ' on '");
+  assert.doesNotMatch(description, /·\s*·/, "double separator");
+  assert.doesNotMatch(description, /\s{2}/, "collapsed segment left a double space");
+  assert.doesNotMatch(description, /(^·|·$)/, "leading or trailing separator");
+}
+
+test("pickAttributionMention: all-undated mentions still name the source", () => {
+  // The shipped bug: this rendered "1 recent mention" and nothing else.
+  const t = tech("qwen", [undatedMention("custom-cee48a6d88", "https://devurl.io/a")]);
+  const picked = pickAttributionMention(t);
+  assert.equal(picked, t.mentions[0]);
+
+  const description = buildDescription(t, picked, { "custom-cee48a6d88": "DevURL" });
+  assert.equal(description, "Latest from DevURL · 1 recent mention");
+  assert.match(description, /DevURL/);
+  assertNoDateClaimed(description);
+});
+
+test("pickAttributionMention: undated fallback takes the FIRST in array order", () => {
+  // Stability rule, stated so a future refactor cannot silently reorder it:
+  // aggregate.mjs leaves undated mentions in scraper document order, so the
+  // first is the topmost link on the index page.
+  const t = tech("zig", [
+    undatedMention("custom-cee48a6d88", "https://devurl.io/first"),
+    undatedMention("custom-cee48a6d88", "https://devurl.io/second"),
+    undatedMention("custom-cee48a6d88", "https://devurl.io/third"),
+  ]);
+  assert.equal(pickAttributionMention(t).url, "https://devurl.io/first");
+});
+
+test("pickAttributionMention: a dated mention still wins, newest first", () => {
+  // Today's behaviour must be untouched wherever dates exist.
+  const oldest = mention("dev.to", "https://dev.to/old", "2026-08-01T10:00:00.000Z");
+  const newest = mention("infoq", "https://infoq.com/new", "2026-08-28T10:00:00.000Z");
+  const middle = mention("lobsters", "https://lobste.rs/mid", "2026-08-14T10:00:00.000Z");
+
+  // Undated ones sit around the dated ones in every position.
+  const t = tech("rust", [
+    undatedMention("custom-cee48a6d88", "https://devurl.io/a"),
+    oldest,
+    undatedMention("custom-cee48a6d88", "https://devurl.io/b"),
+    newest,
+    middle,
+    undatedMention("custom-cee48a6d88", "https://devurl.io/c"),
+  ]);
+  assert.equal(pickAttributionMention(t), newest);
+  assert.equal(
+    buildDescription(t, pickAttributionMention(t), {}),
+    "Latest from InfoQ on 2026-08-28 · 6 recent mentions",
+  );
+});
+
+test("pickAttributionMention: a single dated mention among undated ones wins", () => {
+  const dated = mention("dev.to", "https://dev.to/x", "2026-08-05T10:00:00.000Z");
+  const t = tech("bun", [
+    undatedMention("custom-cee48a6d88", "https://devurl.io/a"),
+    undatedMention("custom-cee48a6d88", "https://devurl.io/b"),
+    dated,
+  ]);
+  assert.equal(pickAttributionMention(t), dated);
+  assert.equal(
+    buildDescription(t, pickAttributionMention(t), {}),
+    "Latest from dev.to on 2026-08-05 · 3 recent mentions",
+  );
+});
+
+test("pickAttributionMention: no mentions omits the clause instead of throwing", () => {
+  const t = tech("ghost", []);
+  assert.equal(pickAttributionMention(t), undefined);
+  // No source is nameable, so there is nothing honest to attribute — and no
+  // "unknown source" placeholder either.
+  assert.equal(buildDescription(t, pickAttributionMention(t), {}), "0 recent mentions");
+  assert.equal(
+    buildDescription(tech("ghost", [], { githubStars: 2400 }), pickAttributionMention(t), {}),
+    "2.4k GitHub stars · 0 recent mentions",
+  );
+});
+
+test("pickAttributionMention: a malformed tech does not crash the selector", () => {
+  // Store entries are replayed from disk; mentions has been seen missing.
+  assert.equal(pickAttributionMention({ slug: "x" }), undefined);
+  assert.equal(pickAttributionMention({ slug: "x", mentions: null }), undefined);
+  assert.equal(pickAttributionMention(undefined), undefined);
+});
+
+test("buildDescription: an undated mention renders the configured NAME, not the hash id", () => {
+  // Regression guard for the earlier fix — it must hold on the dateless path too.
+  const t = tech("hugging-face", [undatedMention("custom-cee48a6d88", "https://devurl.io/a")]);
+  const description = buildDescription(t, pickAttributionMention(t), {
+    "custom-cee48a6d88": "DevURL",
+  });
+  assert.equal(description, "Latest from DevURL · 1 recent mention");
+  assert.doesNotMatch(description, /custom-cee48a6d88/);
+});
+
+test("buildDescription: an undated mention from an orphaned id uses the hostname", () => {
+  const t = tech("webassembly", [
+    undatedMention("custom-cee48a6d88", "https://www.smashingmagazine.com/2026/a/"),
+  ]);
+  assert.equal(
+    buildDescription(t, pickAttributionMention(t), {}),
+    "Latest from smashingmagazine.com · 1 recent mention",
+  );
+});
+
+test("buildDescription: an undated mention with no usable url still names the raw id", () => {
+  const t = tech("sqlite", [undatedMention("custom-cee48a6d88", "not a url")]);
+  const description = buildDescription(t, pickAttributionMention(t), {});
+  assert.equal(description, "Latest from custom-cee48a6d88 · 1 recent mention");
+  assertNoDateClaimed(description);
+});
+
+test("buildDescription: the star prefix still composes with an undated mention", () => {
+  const t = tech("rust", [undatedMention("custom-cee48a6d88", "https://devurl.io/a")], {
+    githubStars: 13100,
+  });
+  const description = buildDescription(t, pickAttributionMention(t), {
+    "custom-cee48a6d88": "DevURL",
+  });
+  assert.equal(description, "13.1k GitHub stars · Latest from DevURL · 1 recent mention");
+  assertNoDateClaimed(description);
+});
+
+test("pickAttributionMention: identical input yields an identical string every call", () => {
+  const cases = [
+    tech("qwen", [
+      undatedMention("custom-cee48a6d88", "https://devurl.io/a"),
+      undatedMention("custom-cee48a6d88", "https://devurl.io/b"),
+      undatedMention("custom-cee48a6d88", "https://devurl.io/c"),
+    ]),
+    tech("rust", [
+      undatedMention("custom-cee48a6d88", "https://devurl.io/a"),
+      mention("dev.to", "https://dev.to/x", "2026-08-05T10:00:00.000Z"),
+      mention("infoq", "https://infoq.com/y", "2026-08-05T10:00:00.000Z"), // tie
+    ]),
+    tech("ghost", []),
+  ];
+  const names = { "custom-cee48a6d88": "DevURL" };
+  for (const t of cases) {
+    const originalOrder = t.mentions.map((m) => m.url);
+    const first = buildDescription(t, pickAttributionMention(t), names);
+    for (let i = 0; i < 25; i += 1) {
+      assert.equal(buildDescription(t, pickAttributionMention(t), names), first);
+    }
+    // Selection must not mutate tech.mentions — a reordered list would make the
+    // NEXT call pick a different mention and break the guarantee above.
+    assert.deepEqual(t.mentions.map((m) => m.url), originalOrder);
+  }
+});
+
+test("pickAttributionMention: selection leaves tech.mentions in its original order", () => {
+  const t = tech("mysql", [
+    mention("dev.to", "https://dev.to/old", "2026-08-01T10:00:00.000Z"),
+    mention("infoq", "https://infoq.com/new", "2026-08-28T10:00:00.000Z"),
+    undatedMention("custom-cee48a6d88", "https://devurl.io/a"),
+  ]);
+  pickAttributionMention(t);
+  assert.deepEqual(t.mentions.map((m) => m.url), [
+    "https://dev.to/old",
+    "https://infoq.com/new",
+    "https://devurl.io/a",
+  ]);
+});
+
 test("sourceLabel: one orphaned aggregator id stays ONE entry, not six hosts", () => {
   // The owner field is a distinct-SOURCE list. Expanding an id into per-article
   // hostnames would report a single feed as six sources.
@@ -265,5 +451,32 @@ test("writeSnapshot: threads the name map into description and owner", () => {
     const blip = JSON.parse(fs.readFileSync(result.path, "utf8")).config.blips[0];
     assert.equal(blip.description, "Latest from Tech Radar on 2026-08-30 · 1 recent mention");
     assert.equal(blip.owner, "Tech Radar");
+  });
+});
+
+test("writeSnapshot: an all-undated blip is still attributed end to end", () => {
+  // The user-visible bug, at the real integration point: every mention comes
+  // from an HTML-scraped source, so nothing carries publishedAt and the blip
+  // used to ship as a bare "3 recent mentions".
+  inTempCwd(() => {
+    const t = tech("qwen", [
+      mention("custom-cee48a6d88", "https://devurl.io/a", null),
+      mention("custom-cee48a6d88", "https://devurl.io/b", null),
+      mention("custom-cee48a6d88", "https://devurl.io/c", null),
+    ]);
+    const result = writeSnapshot([t], BASE_CONFIG, { "custom-cee48a6d88": "DevURL" });
+    const blip = JSON.parse(fs.readFileSync(result.path, "utf8")).config.blips[0];
+    assert.equal(blip.description, "Latest from DevURL · 3 recent mentions");
+    assert.equal(blip.owner, "DevURL");
+    assertNoDateClaimed(blip.description);
+  });
+});
+
+test("writeSnapshot: a mentionless tech ships a blip instead of crashing", () => {
+  inTempCwd(() => {
+    const result = writeSnapshot([tech("ghost", [])], BASE_CONFIG, {});
+    const blip = JSON.parse(fs.readFileSync(result.path, "utf8")).config.blips[0];
+    assert.equal(blip.description, "0 recent mentions");
+    assert.equal(blip.owner, "");
   });
 });

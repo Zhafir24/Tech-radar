@@ -32,11 +32,11 @@ export function writeSnapshot(selected, baseConfig, sourceNames = {}) {
     );
     currentRings[tech.slug] = ring;
 
-    const mostRecent = tech.mentions
-      .filter((m) => m.publishedAt)
-      .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))[0];
-
-    const description = buildDescription(tech, mostRecent, sourceNames);
+    const description = buildDescription(
+      tech,
+      pickAttributionMention(tech),
+      sourceNames,
+    );
 
     return {
       id: tech.slug,
@@ -74,6 +74,40 @@ export function writeSnapshot(selected, baseConfig, sourceNames = {}) {
   return { path: OUTPUT_FILE, blipCount: blips.length, previousRings: previous, currentRings };
 }
 
+/**
+ * The single mention the "Latest from X" clause is a claim about.
+ *
+ * Newest DATED mention first — the original rule, unchanged. What is new is the
+ * fallback, and it exists because two fetcher tiers (the HTML link-scrape and
+ * browser-render paths in fetchers/website.mjs) write `publishedAt: null`: a
+ * scraped anchor carries no date. Selecting with `.filter(m => m.publishedAt)`
+ * alone therefore produced `undefined` for any technology whose mentions ALL
+ * come from such a source, and buildDescription's `if (mostRecent)` then dropped
+ * the WHOLE attribution clause — the blip rendered a bare "1 recent mention"
+ * naming no source, even though the source id had been known the entire time.
+ * On a real snapshot that was 11 of 21 blips (Qwen, Rust, SQLite, Bun, …).
+ * Attribution must not depend on having a date, so fall back to an undated one.
+ *
+ * The fallback deliberately takes the FIRST mention in array order rather than
+ * scanning for a "best" one: it is stable across runs on identical input.
+ * aggregate.mjs sorts mentions newest-first treating undated ones as epoch 0,
+ * and Array#sort is stable, so undated mentions sit at the end in the document
+ * order the scraper read them — index-page top link first, which is as close to
+ * "latest" as a dateless tier can get.
+ *
+ * @param {import("./aggregate.mjs").Technology} tech
+ * @returns {import("./extract.mjs").Mention|undefined} `undefined` only when
+ *   there are no mentions at all, so the clause is omitted rather than rendered
+ *   with a placeholder source.
+ */
+function pickAttributionMention(tech) {
+  const mentions = Array.isArray(tech?.mentions) ? tech.mentions : [];
+  const newestDated = mentions
+    .filter((m) => m?.publishedAt)
+    .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))[0];
+  return newestDated ?? mentions[0];
+}
+
 function buildDescription(tech, mostRecent, sourceNames = {}) {
   const parts = [];
   if (tech.githubStars > 0) {
@@ -81,6 +115,14 @@ function buildDescription(tech, mostRecent, sourceNames = {}) {
   }
   if (mostRecent) {
     const sourceLabelText = mentionSourceLabel(mostRecent, sourceNames);
+    // Undated mentions are now routine here, not a theoretical edge case (see
+    // pickAttributionMention). The wording stays "Latest from X" and simply
+    // loses the date rather than becoming a second sentence shape: the clause's
+    // job is attribution, one shape keeps a missing date reading as "no date
+    // recorded" instead of as a different kind of fact, and the undated mention
+    // we pick IS the topmost — i.e. newest-looking — link the scraper saw.
+    // Never emit a trailing " on " with nothing after it: an empty dayText
+    // would state a date we do not have.
     const dayText = mostRecent.publishedAt
       ? ` on ${mostRecent.publishedAt.slice(0, 10)}`
       : "";
@@ -213,4 +255,5 @@ export const __test__ = {
   mentionSourceLabel,
   sourceLabel,
   buildDescription,
+  pickAttributionMention,
 };
