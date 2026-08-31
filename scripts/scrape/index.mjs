@@ -63,6 +63,15 @@ const customSources = sourcesConfig.custom
     fn: () => fetchWebsite(c.id, c.url),
   }));
 
+/*
+ * Every custom name, including disabled ones — blip descriptions render the
+ * source a mention came from, and the store still holds mentions from sources
+ * that are switched off. Built-in labels stay hardcoded in write.mjs.
+ */
+const customSourceNames = Object.fromEntries(
+  sourcesConfig.custom.map((c) => [c.id, c.name]),
+);
+
 const sources = [...enabledBuiltIn, ...customSources];
 log.info("sources selected", {
   builtInActive: enabledBuiltIn.map((s) => s.id),
@@ -140,6 +149,7 @@ assertValidBaseConfig(baseConfig);
 const { path: outPath, blipCount, previousRings, currentRings } = writeSnapshot(
   selected,
   baseConfig,
+  customSourceNames,
 );
 log.info("snapshot written", { file: outPath, blips: blipCount });
 

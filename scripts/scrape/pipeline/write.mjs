@@ -12,8 +12,12 @@ const PREVIOUS_FILE = path.join("data", "previous-rings.json");
 /**
  * @param {import("./aggregate.mjs").Technology[]} selected
  * @param {object} baseConfig  The frontend's DEFAULT_RADAR_CONFIG (rings + quadrants).
+ * @param {Record<string, string>} [sourceNames]  Custom source id → display name,
+ *   supplied by the caller. Passed in rather than read from
+ *   data/sources-config.json here: a disk read inside this module would bind
+ *   label rendering to process.cwd() and put it out of reach of unit tests.
  */
-export function writeSnapshot(selected, baseConfig) {
+export function writeSnapshot(selected, baseConfig, sourceNames = {}) {
   const previous = loadPrevious();
   const pipelineHasHistory = Object.keys(previous).length > 0;
   const currentRings = {};
@@ -32,7 +36,7 @@ export function writeSnapshot(selected, baseConfig) {
       .filter((m) => m.publishedAt)
       .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))[0];
 
-    const description = buildDescription(tech, mostRecent);
+    const description = buildDescription(tech, mostRecent, sourceNames);
 
     return {
       id: tech.slug,
@@ -46,7 +50,7 @@ export function writeSnapshot(selected, baseConfig) {
       description,
       since: tech.firstSeen?.slice(0, 7) ?? "",
       updatedAt: new Date().toISOString(),
-      owner: sourceLabel(tech),
+      owner: sourceLabel(tech, sourceNames),
     };
   });
 
@@ -70,13 +74,13 @@ export function writeSnapshot(selected, baseConfig) {
   return { path: OUTPUT_FILE, blipCount: blips.length, previousRings: previous, currentRings };
 }
 
-function buildDescription(tech, mostRecent) {
+function buildDescription(tech, mostRecent, sourceNames = {}) {
   const parts = [];
   if (tech.githubStars > 0) {
     parts.push(`${formatStars(tech.githubStars)} GitHub stars`);
   }
   if (mostRecent) {
-    const sourceLabelText = shortSource(mostRecent.source);
+    const sourceLabelText = mentionSourceLabel(mostRecent, sourceNames);
     const dayText = mostRecent.publishedAt
       ? ` on ${mostRecent.publishedAt.slice(0, 10)}`
       : "";
@@ -87,7 +91,22 @@ function buildDescription(tech, mostRecent) {
   return parts.join(" · ");
 }
 
-function shortSource(id) {
+/** Longest label a single source may contribute — matches the API's name cap. */
+const MAX_SOURCE_LABEL = 60;
+
+/** Shown instead of an empty string when a mention carries no id at all. */
+const UNKNOWN_SOURCE = "unknown source";
+
+/**
+ * Label derivable from the id alone: built-in switch, then the caller's
+ * id → name map. Returns null when the id is unknown, so each call site can
+ * pick its own last resort.
+ *
+ * @param {string} id  mention.source
+ * @param {Record<string, string>} [sourceNames]  custom source id → display name
+ * @returns {string|null}
+ */
+function knownSourceLabel(id, sourceNames = {}) {
   switch (id) {
     case "github-trending": return "GitHub Trending";
     // Historical ids kept for backward compatibility with older store entries
@@ -98,13 +117,63 @@ function shortSource(id) {
     case "infoq.com": return "InfoQ";
     case "dev.to": return "dev.to";
     case "lobsters": return "Lobste.rs";
-    default: return id;
+  }
+
+  // typeof guard, not `in`: a plain object still inherits `constructor` and
+  // friends, and an id colliding with one would render "function Object()".
+  const configured = sourceNames?.[id];
+  if (typeof configured === "string" && configured.trim()) {
+    return configured.trim().slice(0, MAX_SOURCE_LABEL);
+  }
+  return null;
+}
+
+/**
+ * Label for ONE specific mention, for the "Latest from X on DATE" sentence.
+ *
+ * A removed custom source keeps its mentions in data/tech-store.json but loses
+ * its name from sources-config, so the hash id is all that's left. The article's
+ * own hostname is a true statement about THAT article, which is why the
+ * hostname step is allowed here and nowhere else.
+ */
+function mentionSourceLabel(mention, sourceNames = {}) {
+  const known = knownSourceLabel(mention?.source, sourceNames);
+  if (known) return known;
+  const host = hostLabel(mention?.url);
+  if (host) return host;
+  return typeof mention?.source === "string" && mention.source
+    ? mention.source
+    : UNKNOWN_SOURCE;
+}
+
+/**
+ * Label for a source id in the distinct-source list. Deliberately id-only:
+ * an aggregator feed links out to many domains, so a per-mention hostname
+ * fallback here would split one source into six entries and inflate the count
+ * the owner field is meant to report.
+ */
+function sourceIdLabel(id, sourceNames = {}) {
+  const known = knownSourceLabel(id, sourceNames);
+  if (known) return known;
+  return typeof id === "string" && id ? id : UNKNOWN_SOURCE;
+}
+
+/** Hostname of an article url, minus `www.`; "" when there is nothing usable. */
+function hostLabel(url) {
+  // new URL() throws on a missing or malformed href, and mentions replayed from
+  // an old store carry whatever the fetcher wrote at the time.
+  try {
+    return new URL(url).hostname.replace(/^www\./i, "");
+  } catch {
+    return "";
   }
 }
 
-function sourceLabel(tech) {
-  const sources = new Set(tech.mentions.map((m) => shortSource(m.source)));
-  return [...sources].join(", ").slice(0, 60);
+function sourceLabel(tech, sourceNames = {}) {
+  const sources = new Set(
+    tech.mentions.map((m) => sourceIdLabel(m.source, sourceNames)),
+  );
+  return [...sources].join(", ").slice(0, MAX_SOURCE_LABEL);
 }
 
 function formatStars(n) {
@@ -137,3 +206,11 @@ function savePrevious(currentRings) {
     // Non-fatal — movement will fall back to "no-change" next run.
   }
 }
+
+// Exported only for unit tests.
+export const __test__ = {
+  sourceIdLabel,
+  mentionSourceLabel,
+  sourceLabel,
+  buildDescription,
+};
