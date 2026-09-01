@@ -9,7 +9,7 @@
  *   POST   /api/sources                body {name,url}      → adds a custom RSS
  *   DELETE /api/sources/:id            → removes a custom source
  *   POST   /api/sources/:id/toggle     body {enabled:bool}  → enable/disable
- *   POST   /api/scrape                 → run `npm run scrape` if idle
+ *   POST   /api/scrape                 → run the scrape pipeline if idle
  *   GET    /api/scrape                 → { running, lastExitCode, lastError, tail[] }
  *
  * SSRF: URLs are constrained to http/https and cannot target loopback/private
@@ -17,6 +17,8 @@
  * reach internal services.
  */
 import { spawn } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   loadSourcesConfig,
   saveSourcesConfig,
@@ -24,6 +26,17 @@ import {
   isBuiltIn,
 } from "../scrape/config.mjs";
 import { validateExternalUrl } from "../scrape/url-guard.mjs";
+
+/*
+ * Repo root, walked up from this file (scripts/api/) exactly the way
+ * scripts/scrape/index.mjs derives its own ROOT. Deliberately NOT
+ * process.cwd(): this module is loaded inside the Vite dev server, whose
+ * working directory is whatever the terminal, editor or autostart task that
+ * launched it happened to be in — resolving the scraper against it would break
+ * the moment the server is started from anywhere but the repo root.
+ */
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const SCRAPE_ENTRY = path.join(ROOT, "scripts", "scrape", "index.mjs");
 
 const scrapeState = {
   running: false,
@@ -228,17 +241,31 @@ function startScrape(res) {
   scrapeState.startedAt = new Date().toISOString();
   scrapeState.finishedAt = null;
 
-  // On Windows, npm resolves to npm.cmd — spawning .cmd/.bat without a shell
-  // is blocked by Node ≥20 for security reasons and returns spawn EINVAL.
-  // Using shell:true on Windows only is safe here because our own args list
-  // is fixed and contains no user-controlled data.
-  const isWin = process.platform === "win32";
-  const cmd = isWin ? "npm.cmd" : "npm";
+  // Run the scraper with the Node binary that is already running this server,
+  // rather than shelling out to `npm run scrape`. package.json defines that
+  // script as exactly `node scripts/scrape/index.mjs` and there are no
+  // pre/post-scrape hooks, so npm adds nothing here but two failure modes:
+  //
+  //   1. On Windows npm means npm.cmd, and Node ≥20 refuses to spawn .cmd/.bat
+  //      without a shell (spawn EINVAL) — which forced shell:true. Passing an
+  //      args array with shell:true is what Node deprecated as DEP0190: the
+  //      args are concatenated into the command line, not escaped. Any path
+  //      containing a space then breaks apart mid-command. No shell, no
+  //      warning, no quoting hazard.
+  //   2. `npm` is frequently absent from PATH on macOS under nvm or Homebrew
+  //      when an editor (rather than a login shell) launched the dev server,
+  //      giving spawn ENOENT and a scrape that never starts. process.execPath
+  //      is the interpreter executing this line, so it always exists and is
+  //      always the right version.
+  //
+  // cwd is belt-and-braces: scripts/scrape/index.mjs does its own
+  // process.chdir(ROOT), so the child fixes this up regardless — but setting it
+  // means the child is correct from its very first tick, and stays correct if
+  // that chdir is ever dropped.
   let child;
   try {
-    child = spawn(cmd, ["run", "scrape"], {
-      cwd: process.cwd(),
-      shell: isWin,
+    child = spawn(process.execPath, [SCRAPE_ENTRY], {
+      cwd: ROOT,
       windowsHide: true,
     });
   } catch (err) {
@@ -259,10 +286,14 @@ function startScrape(res) {
   child.on("error", (err) => {
     scrapeState.lastError = err?.message ?? String(err);
   });
-  // Reset on "close", not "exit". A failed spawn (npm missing from PATH — the
-  // normal case on macOS under nvm/Homebrew when the editor launched the dev
-  // server) emits "error" and "close" but NEVER "exit", so resetting only in
-  // "exit" left running=true forever and every later rescrape returned 409.
+  // Reset on "close", not "exit". A spawn that never produces a process emits
+  // "error" and "close" but NEVER "exit" — originally hit when npm was missing
+  // from PATH (macOS under nvm/Homebrew, dev server launched by the editor) —
+  // and resetting only in "exit" left running=true forever, so every later
+  // rescrape returned 409. Spawning process.execPath makes that particular
+  // trigger unreachable, but any other failure to start the child (the entry
+  // script missing, EMFILE, EACCES) takes the same "error"+"close" path, so the
+  // reset stays here.
   child.on("close", (code) => {
     scrapeState.running = false;
     scrapeState.lastExitCode = code;
