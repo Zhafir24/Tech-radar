@@ -25,10 +25,12 @@
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "rimraf": "file:./vendor/rimraf-shim"
   },
   "overrides": {
-    "encoding-sniffer": "^1.0.2"
+    "encoding-sniffer": "^1.0.2",
+    "rimraf": "$rimraf"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.4",

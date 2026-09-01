@@ -1,0 +1,10 @@
+{
+  "name": "rimraf",
+  "version": "3.0.2",
+  "description": "Local zero-dependency stand-in for rimraf@3, wired in via an npm override to drop the deprecated rimraf/glob/inflight chain. See index.js for the full rationale.",
+  "license": "MIT",
+  "main": "index.js",
+  "files": [
+    "index.js"
+  ]
+}
