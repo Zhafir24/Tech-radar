@@ -1,0 +1,362 @@
+{
+  "golang/go": {
+    "repo": "golang/go",
+    "stars": 137086,
+    "url": "https://github.com/golang/go",
+    "repoAgeDays": 4396,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:20.412Z"
+  },
+  "microsoft/TypeScript": {
+    "repo": "microsoft/TypeScript",
+    "stars": 110829,
+    "url": "https://github.com/microsoft/TypeScript",
+    "repoAgeDays": 4458,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:20.782Z"
+  },
+  "jax-ml/jax": {
+    "repo": "jax-ml/jax",
+    "stars": 36232,
+    "url": "https://github.com/jax-ml/jax",
+    "repoAgeDays": 2867,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:21.143Z"
+  },
+  "dart-lang/sdk": {
+    "repo": "dart-lang/sdk",
+    "stars": 11267,
+    "url": "https://github.com/dart-lang/sdk",
+    "repoAgeDays": 4125,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:21.493Z"
+  },
+  "react/react": {
+    "repo": "react/react",
+    "stars": 248622,
+    "url": "https://github.com/react/react",
+    "repoAgeDays": 4847,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:21.934Z"
+  },
+  "sveltejs/svelte": {
+    "repo": "sveltejs/svelte",
+    "stars": 88039,
+    "url": "https://github.com/sveltejs/svelte",
+    "repoAgeDays": 3571,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:22.441Z"
+  },
+  "python/cpython": {
+    "repo": "python/cpython",
+    "stars": 75574,
+    "url": "https://github.com/python/cpython",
+    "repoAgeDays": 3489,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:22.796Z"
+  },
+  "rust-lang/rust": {
+    "repo": "rust-lang/rust",
+    "stars": 116941,
+    "url": "https://github.com/rust-lang/rust",
+    "repoAgeDays": 5920,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:23.179Z"
+  },
+  "fastify/fastify": {
+    "repo": "fastify/fastify",
+    "stars": 37075,
+    "url": "https://github.com/fastify/fastify",
+    "repoAgeDays": 3624,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:23.543Z"
+  },
+  "supabase/supabase": {
+    "repo": "supabase/supabase",
+    "stars": 108669,
+    "url": "https://github.com/supabase/supabase",
+    "repoAgeDays": 2516,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:23.878Z"
+  },
+  "moby/moby": {
+    "repo": "moby/moby",
+    "stars": 72030,
+    "url": "https://github.com/moby/moby",
+    "repoAgeDays": 4973,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:24.258Z"
+  },
+  "nestjs/nest": {
+    "repo": "nestjs/nest",
+    "stars": 76543,
+    "url": "https://github.com/nestjs/nest",
+    "repoAgeDays": 3495,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:24.583Z"
+  },
+  "aquasecurity/trivy": {
+    "repo": "aquasecurity/trivy",
+    "stars": 37724,
+    "url": "https://github.com/aquasecurity/trivy",
+    "repoAgeDays": 2700,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:24.922Z"
+  },
+  "kubernetes/kubernetes": {
+    "repo": "kubernetes/kubernetes",
+    "stars": 125904,
+    "url": "https://github.com/kubernetes/kubernetes",
+    "repoAgeDays": 4469,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:25.256Z"
+  },
+  "php/php-src": {
+    "repo": "php/php-src",
+    "stars": 40353,
+    "url": "https://github.com/php/php-src",
+    "repoAgeDays": 5556,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:25.624Z"
+  },
+  "bitwarden/server": {
+    "repo": "bitwarden/server",
+    "stars": 19972,
+    "url": "https://github.com/bitwarden/server",
+    "repoAgeDays": 3934,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:25.967Z"
+  },
+  "traefik/traefik": {
+    "repo": "traefik/traefik",
+    "stars": 64695,
+    "url": "https://github.com/traefik/traefik",
+    "repoAgeDays": 4005,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:26.287Z"
+  },
+  "vuejs/core": {
+    "repo": "vuejs/core",
+    "stars": 54285,
+    "url": "https://github.com/vuejs/core",
+    "repoAgeDays": 3002,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:26.623Z"
+  },
+  "caddyserver/caddy": {
+    "repo": "caddyserver/caddy",
+    "stars": 75376,
+    "url": "https://github.com/caddyserver/caddy",
+    "repoAgeDays": 4248,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:26.981Z"
+  },
+  "openjdk/jdk": {
+    "repo": "openjdk/jdk",
+    "stars": 23300,
+    "url": "https://github.com/openjdk/jdk",
+    "repoAgeDays": 2905,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:27.349Z"
+  },
+  "JetBrains/kotlin": {
+    "repo": "JetBrains/kotlin",
+    "stars": 53370,
+    "url": "https://github.com/JetBrains/kotlin",
+    "repoAgeDays": 5313,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:27.718Z"
+  },
+  "electron/electron": {
+    "repo": "electron/electron",
+    "stars": 122832,
+    "url": "https://github.com/electron/electron",
+    "repoAgeDays": 4890,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:28.068Z"
+  },
+  "tailscale/tailscale": {
+    "repo": "tailscale/tailscale",
+    "stars": 35933,
+    "url": "https://github.com/tailscale/tailscale",
+    "repoAgeDays": 2404,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:28.387Z"
+  },
+  "tailwindlabs/tailwindcss": {
+    "repo": "tailwindlabs/tailwindcss",
+    "stars": 97418,
+    "url": "https://github.com/tailwindlabs/tailwindcss",
+    "repoAgeDays": 3251,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:28.734Z"
+  },
+  "Infisical/infisical": {
+    "repo": "Infisical/infisical",
+    "stars": 29055,
+    "url": "https://github.com/Infisical/infisical",
+    "repoAgeDays": 1487,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:29.089Z"
+  },
+  "swiftlang/swift": {
+    "repo": "swiftlang/swift",
+    "stars": 70316,
+    "url": "https://github.com/swiftlang/swift",
+    "repoAgeDays": 3965,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:45.986Z"
+  },
+  "postgres/postgres": {
+    "repo": "postgres/postgres",
+    "stars": 21971,
+    "url": "https://github.com/postgres/postgres",
+    "repoAgeDays": 5823,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:46.431Z"
+  },
+  "n8n-io/n8n": {
+    "repo": "n8n-io/n8n",
+    "stars": 202992,
+    "url": "https://github.com/n8n-io/n8n",
+    "repoAgeDays": 2627,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:46.781Z"
+  },
+  "k3s-io/k3s": {
+    "repo": "k3s-io/k3s",
+    "stars": 33858,
+    "url": "https://github.com/k3s-io/k3s",
+    "repoAgeDays": 3015,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:47.238Z"
+  },
+  "coder/coder": {
+    "repo": "coder/coder",
+    "stars": 14319,
+    "url": "https://github.com/coder/coder",
+    "repoAgeDays": 1714,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:47.626Z"
+  },
+  "NixOS/nixpkgs": {
+    "repo": "NixOS/nixpkgs",
+    "stars": 25996,
+    "url": "https://github.com/NixOS/nixpkgs",
+    "repoAgeDays": 5202,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:47.977Z"
+  },
+  "evanw/esbuild": {
+    "repo": "evanw/esbuild",
+    "stars": 40030,
+    "url": "https://github.com/evanw/esbuild",
+    "repoAgeDays": 3730,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:48.316Z"
+  },
+  "ClickHouse/ClickHouse": {
+    "repo": "ClickHouse/ClickHouse",
+    "stars": 49587,
+    "url": "https://github.com/ClickHouse/ClickHouse",
+    "repoAgeDays": 3742,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:48.652Z"
+  },
+  "colinhacks/zod": {
+    "repo": "colinhacks/zod",
+    "stars": 43738,
+    "url": "https://github.com/colinhacks/zod",
+    "repoAgeDays": 2368,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:48.975Z"
+  },
+  "nats-io/nats-server": {
+    "repo": "nats-io/nats-server",
+    "stars": 20645,
+    "url": "https://github.com/nats-io/nats-server",
+    "repoAgeDays": 5054,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:49.328Z"
+  },
+  "oven-sh/bun": {
+    "repo": "oven-sh/bun",
+    "stars": 95829,
+    "url": "https://github.com/oven-sh/bun",
+    "repoAgeDays": 1966,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:49.782Z"
+  },
+  "withastro/astro": {
+    "repo": "withastro/astro",
+    "stars": 62206,
+    "url": "https://github.com/withastro/astro",
+    "repoAgeDays": 1995,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:50.182Z"
+  },
+  "apache/airflow": {
+    "repo": "apache/airflow",
+    "stars": 46676,
+    "url": "https://github.com/apache/airflow",
+    "repoAgeDays": 4158,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:50.596Z"
+  },
+  "apache/kafka": {
+    "repo": "apache/kafka",
+    "stars": 33656,
+    "url": "https://github.com/apache/kafka",
+    "repoAgeDays": 5495,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:50.937Z"
+  },
+  "vitejs/vite": {
+    "repo": "vitejs/vite",
+    "stars": 82631,
+    "url": "https://github.com/vitejs/vite",
+    "repoAgeDays": 2324,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:51.309Z"
+  },
+  "containerd/containerd": {
+    "repo": "containerd/containerd",
+    "stars": 21236,
+    "url": "https://github.com/containerd/containerd",
+    "repoAgeDays": 3945,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:51.632Z"
+  },
+  "milvus-io/milvus": {
+    "repo": "milvus-io/milvus",
+    "stars": 45912,
+    "url": "https://github.com/milvus-io/milvus",
+    "repoAgeDays": 2542,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:51.990Z"
+  },
+  "huggingface/transformers": {
+    "repo": "huggingface/transformers",
+    "stars": 164681,
+    "url": "https://github.com/huggingface/transformers",
+    "repoAgeDays": 2863,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:52.348Z"
+  },
+  "sigstore/cosign": {
+    "repo": "sigstore/cosign",
+    "stars": 6274,
+    "url": "https://github.com/sigstore/cosign",
+    "repoAgeDays": 2034,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:52.958Z"
+  },
+  "langchain-ai/langchain": {
+    "repo": "langchain-ai/langchain",
+    "stars": 145406,
+    "url": "https://github.com/langchain-ai/langchain",
+    "repoAgeDays": 1415,
+    "archived": false,
+    "fetchedAt": "2026-09-01T07:47:53.298Z"
+  }
+}

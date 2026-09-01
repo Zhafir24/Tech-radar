@@ -23,6 +23,7 @@ import { fetchLobsters } from "./fetchers/lobsters.mjs";
 import { fetchWebsite } from "./fetchers/website.mjs";
 import { extractMentions } from "./pipeline/extract.mjs";
 import { aggregate, mergeWithStore } from "./pipeline/aggregate.mjs";
+import { enrichGitHubStars } from "./pipeline/githubStars.mjs";
 import { score } from "./pipeline/score.mjs";
 import { selectTop } from "./pipeline/select.mjs";
 import { writeSnapshot } from "./pipeline/write.mjs";
@@ -137,7 +138,14 @@ const enabledSourceIds = new Set(sources.map((s) => s.id));
 const allTechs = mergeWithStore(freshTechs, enabledSourceIds);
 log.info("store merged", { eligible: allTechs.length });
 
-const scored = allTechs.map(score).sort((a, b) => b.overallScore - a.overallScore);
+// Star counts come from each technology's own repository, not from whatever
+// trending repo happened to share a keyword with it. Skipped entirely when
+// github-trending is off, so disabling that source still clears GitHub data.
+const enriched = await enrichGitHubStars(allTechs, {
+  enabled: enabledSourceIds.has("github-trending"),
+});
+
+const scored = enriched.map(score).sort((a, b) => b.overallScore - a.overallScore);
 const selected = selectTop(scored);
 log.info("selection complete", { selected: selected.length });
 

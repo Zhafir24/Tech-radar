@@ -91,10 +91,23 @@ export function aggregate(mentions) {
     }
     const tech = bag.get(mention.slug);
     tech.mentions.push(mention);
+    // Only a technology's OWN repository may set its star count.
+    //
+    // The trending scraper matches repos to technologies by alias text, so
+    // taking the highest star count of anything that matched attributed
+    // freeCodeCamp's 453k stars to TypeScript, awesome-go's to Go and
+    // kubescape's 11.6k to Kubernetes (whose own repo has ~125k). Those are
+    // false, externally checkable numbers, and assignRing keys on stars, so
+    // they placed blips in the wrong ring too.
+    //
+    // A technology with no canonical repo on its taxonomy entry — AWS,
+    // Anthropic Claude, SBOM — now reports no stars rather than borrowing
+    // someone else's. githubStars.mjs refreshes the real figure from the API.
     if (mention.source === "github-trending" && mention.raw?.stars) {
-      const stars = Number(mention.raw.stars) || 0;
-      if (stars > tech.githubStars) {
-        tech.githubStars = stars;
+      const canonical = SLUG_TO_ENTRY.get(mention.slug)?.repo;
+      const seen = `${mention.raw.owner}/${mention.raw.repo}`;
+      if (canonical && seen.toLowerCase() === canonical.toLowerCase()) {
+        tech.githubStars = Number(mention.raw.stars) || 0;
         tech.githubUrl = mention.url;
       }
     }
